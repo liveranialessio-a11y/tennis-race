@@ -1,0 +1,23 @@
+{
+  "name": "Tennis Race",
+  "short_name": "Tennis Race",
+  "description": "Gestione campionati di tennis con ranking live e sistema di sfide",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#8BC34A",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "/image.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ]
+}
