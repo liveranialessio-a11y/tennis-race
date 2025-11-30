@@ -1,0 +1,769 @@
+import React, { useEffect, useState, useMemo } from 'react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
+import { format } from 'date-fns';
+import { it } from 'date-fns/locale';
+import { 
+  Swords, Plus, Calendar as CalendarIcon, Clock, Search, 
+  ChevronLeft, ChevronRight, Check, CheckCircle, XCircle, 
+  FileCheck, History, Trophy
+} from 'lucide-react';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Calendar } from '@/components/ui/calendar';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Label } from '@/components/ui/label';
+
+interface Player {
+  id: string;
+  user_id: string;
+  display_name: string;
+  current_rank: number;
+  avatar_url: string | null;
+}
+
+interface Match {
+  id: string;
+  championship_id: string;
+  winner_id: string;
+  loser_id: string;
+  score: string;
+  played_at: string;
+  is_validated: boolean;
+  is_scheduled: boolean;
+  reported_by: string;
+}
+
+const Challenges: React.FC = () => {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [allMatches, setAllMatches] = useState<Match[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [championshipId, setChampionshipId] = useState<string>('');
+  
+  // Dialog states
+  const [newChallengeOpen, setNewChallengeOpen] = useState(false);
+  const [registerResultOpen, setRegisterResultOpen] = useState(false);
+  const [currentStep, setCurrentStep] = useState(1);
+  
+  // Form data - New Challenge
+  const [filteredPlayers, setFilteredPlayers] = useState<Player[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedOpponent, setSelectedOpponent] = useState<Player | null>(null);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+  const [selectedTime, setSelectedTime] = useState<string>('');
+
+  // Form data - Register Result
+  const [resultOpponent, setResultOpponent] = useState<Player | null>(null);
+  const [resultWinner, setResultWinner] = useState<'me' | 'opponent' | null>(null);
+  const [set1Winner, setSet1Winner] = useState<number | null>(null);
+  const [set1Loser, setSet1Loser] = useState<number | null>(null);
+  const [set2Winner, setSet2Winner] = useState<number | null>(null);
+  const [set2Loser, setSet2Loser] = useState<number | null>(null);
+
+  // Computed values - filtra sfide future e passate
+  const scheduledMatches = useMemo(() => {
+    const now = new Date();
+    return allMatches
+      .filter(match => 
+        match.is_scheduled && new Date(match.played_at) > now
+      )
+      .sort((a, b) => new Date(a.played_at).getTime() - new Date(b.played_at).getTime()); // Ordina per vicinanza (ASC)
+  }, [allMatches]);
+
+  // Match programmati passati che devono essere registrati
+  const matchesToRegister = useMemo(() => {
+    const now = new Date();
+    return allMatches
+      .filter(match => 
+        match.is_scheduled && new Date(match.played_at) <= now
+      )
+      .sort((a, b) => new Date(a.played_at).getTime() - new Date(b.played_at).getTime()); // Ordina dalla più vecchia alla più recente (ASC)
+  }, [allMatches]);
+
+  const matchHistory = useMemo(() => {
+    // Solo match già giocati con risultato (is_scheduled = false)
+    const playedMatches = allMatches.filter(match => !match.is_scheduled);
+    
+    // Prendi solo le ultime 3
+    return playedMatches
+      .sort((a, b) => new Date(b.played_at).getTime() - new Date(a.played_at).getTime())
+      .slice(0, 3);
+  }, [allMatches]);
+
+  useEffect(() => {
+    fetchData();
+  }, [user]);
+
+  useEffect(() => {
+    if (searchQuery.trim() === '') {
+      setFilteredPlayers(players.filter(p => p.user_id !== user?.id));
+    } else {
+      const query = searchQuery.toLowerCase();
+      setFilteredPlayers(
+        players.filter(
+          (player) =>
+            player.user_id !== user?.id &&
+            player.display_name.toLowerCase().includes(query)
+        )
+      );
+    }
+  }, [searchQuery, players, user]);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+
+      // Get championship
+      const { data: champData } = await supabase
+        .from('championships')
+        .select('id')
+        .limit(1)
+        .single();
+
+      if (!champData) return;
+      setChampionshipId(champData.id);
+
+      // Get all players
+      const { data: playersData } = await supabase
+        .from('players')
+        .select('*')
+        .eq('championship_id', champData.id);
+
+      setPlayers(playersData || []);
+
+      if (!user?.id) return;
+
+      // Get ALL matches where user is involved
+      const { data: matchesData } = await supabase
+        .from('matches')
+        .select('*')
+        .eq('championship_id', champData.id)
+        .or(`winner_id.eq.${user.id},loser_id.eq.${user.id}`)
+        .order('played_at', { ascending: false });
+
+      console.log('📊 All matches fetched:', matchesData?.length);
+      setAllMatches(matchesData || []);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      toast({
+        title: 'Errore',
+        description: 'Impossibile caricare i dati',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getPlayerName = (userId: string) => {
+    const player = players.find(p => p.user_id === userId);
+    return player?.display_name || 'Giocatore';
+  };
+
+  const getPlayerAvatar = (userId: string): string | null => {
+    const player = players.find(p => p.user_id === userId);
+    return player?.avatar_url || null;
+  };
+
+  const getPlayerInitials = (userId: string) => {
+    const name = getPlayerName(userId);
+    const parts = name.split(' ');
+    if (parts.length >= 2) {
+      return parts[0].charAt(0) + parts[1].charAt(0);
+    }
+    return name.slice(0, 2).toUpperCase();
+  };
+
+  // New Challenge handlers
+  const handleOpenNewChallenge = () => {
+    console.log('🚀 Opening New Challenge Dialog...');
+    setNewChallengeOpen(true);
+    setCurrentStep(1);
+    setSelectedOpponent(null);
+    setSelectedDate(undefined);
+    setSelectedTime('');
+    setSearchQuery('');
+  };
+
+  const handleCloseNewChallenge = () => {
+    console.log('❌ Closing New Challenge Dialog');
+    setNewChallengeOpen(false);
+    setCurrentStep(1);
+  };
+
+  const handleNextStep = () => {
+    console.log('⏭️ Next Step clicked, current step:', currentStep);
+    
+    if (currentStep === 1 && !selectedOpponent) {
+      console.log('⚠️ No opponent selected');
+      toast({
+        title: 'Attenzione',
+        description: 'Seleziona un avversario',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (currentStep === 2 && !selectedDate) {
+      console.log('⚠️ No date selected');
+      toast({
+        title: 'Attenzione',
+        description: 'Seleziona una data',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (currentStep === 3 && !selectedTime) {
+      console.log('⚠️ No time selected');
+      toast({
+        title: 'Attenzione',
+        description: 'Seleziona un orario',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    if (currentStep < 3) {
+      console.log('➡️ Moving to step:', currentStep + 1);
+      setCurrentStep(currentStep + 1);
+    } else {
+      console.log('✅ Creating challenge...');
+      handleCreateChallenge();
+    }
+  };
+
+  const handlePrevStep = () => {
+    console.log('⏮️ Previous Step clicked, current step:', currentStep);
+    if (currentStep > 1) {
+      setCurrentStep(currentStep - 1);
+    }
+  };
+
+  const handleCreateChallenge = async () => {
+    if (!selectedOpponent || !selectedDate || !selectedTime || !user?.id) {
+      console.log('⚠️ Missing data:', { selectedOpponent, selectedDate, selectedTime, userId: user?.id });
+      return;
+    }
+
+    try {
+      console.log('📝 Creating challenge with data:', {
+        opponent: selectedOpponent.display_name,
+        date: selectedDate,
+        time: selectedTime
+      });
+
+      const [hours, minutes] = selectedTime.split(':');
+      const matchDateTime = new Date(selectedDate);
+      matchDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+
+      console.log('📅 Match datetime:', matchDateTime.toISOString());
+
+      const { error } = await supabase.from('matches').insert({
+        championship_id: championshipId,
+        winner_id: user.id,
+        loser_id: selectedOpponent.user_id,
+        played_at: matchDateTime.toISOString(),
+        is_scheduled: true,
+        is_validated: false,
+        score: 'Da giocare',
+        reported_by: user.id,
+      });
+
+      if (error) {
+        console.error('❌ Supabase error:', error);
+        throw error;
+      }
+
+      console.log('✅ Challenge created successfully!');
+
+      toast({
+        title: 'Successo',
+        description: 'Sfida creata!',
+      });
+
+      handleCloseNewChallenge();
+      fetchData();
+    } catch (error: any) {
+      console.error('❌ Error creating challenge:', error);
+      toast({
+        title: 'Errore',
+        description: error.message || 'Impossibile creare la sfida',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Register Result handlers
+  const [matchToUpdate, setMatchToUpdate] = useState<Match | null>(null);
+
+  const handleOpenRegisterResult = (matchToRegister?: Match | undefined) => {
+    setRegisterResultOpen(true);
+    setResultWinner(null);
+    setSet1Winner(null);
+    setSet1Loser(null);
+    setSet2Winner(null);
+    setSet2Loser(null);
+    setMatchToUpdate(matchToRegister || null);
+
+    if (matchToRegister && user) {
+      const opponentId = matchToRegister.winner_id === user.id ? matchToRegister.loser_id : matchToRegister.winner_id;
+      setResultOpponent(players.find(p => p.user_id === opponentId) || null);
+    }
+  };
+
+  const handleCloseRegisterResult = () => {
+    setRegisterResultOpen(false);
+  };
+
+  const handleRegisterResult = async () => {
+    if (!resultOpponent || !resultWinner || !user?.id) {
+      toast({
+        title: 'Attenzione',
+        description: 'Completa tutti i campi',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Validate score - almeno uno dei due valori del primo set deve essere > 0
+    if (set1Winner === null || set1Loser === null) {
+      toast({
+        title: 'Attenzione',
+        description: 'Inserisci il punteggio del primo set',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Valida che ci sia almeno un vincitore nel set (uno dei due deve essere 6 o 7)
+    if (set1Winner < 6 && set1Loser < 6) {
+      toast({
+        title: 'Attenzione',
+        description: 'Un set deve essere vinto con almeno 6 game',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Se il set 2 è stato inserito (almeno uno dei due valori > 0), validalo
+    if (set2Winner !== null || set2Loser !== null) {
+      // Entrambi i valori devono essere inseriti
+      if (set2Winner === null || set2Loser === null) {
+        toast({
+          title: 'Attenzione',
+          description: 'Completa il punteggio del secondo set',
+          variant: 'destructive',
+        });
+        return;
+      }
+      
+      // Validazione: almeno uno deve aver vinto con 6+ game
+      if (set2Winner < 6 && set2Loser < 6) {
+        toast({
+          title: 'Attenzione',
+          description: 'Il secondo set deve essere vinto con almeno 6 game',
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+
+    try {
+      const winnerId = resultWinner === 'me' ? user.id : resultOpponent.user_id;
+      const loserId = resultWinner === 'me' ? resultOpponent.user_id : user.id;
+
+      // Build score string
+      let scoreStr = `${set1Winner}-${set1Loser}`;
+      if (set2Winner !== null && set2Loser !== null) {
+        scoreStr += ` ${set2Winner}-${set2Loser}`;
+      }
+
+      let error;
+      
+      // Se stiamo aggiornando una sfida programmata esistente
+      if (matchToUpdate) {
+        console.log('📝 Updating existing scheduled match:', matchToUpdate.id);
+        const updateResult = await supabase
+          .from('matches')
+          .update({
+            winner_id: winnerId,
+            loser_id: loserId,
+            score: scoreStr,
+            is_scheduled: false,
+            is_validated: true, // Imposta subito a true per calcolare l'ELO
+            played_at: new Date().toISOString(),
+            reported_by: user.id,
+          })
+          .eq('id', matchToUpdate.id);
+        
+        error = updateResult.error;
+      } else {
+        // Altrimenti crea un nuovo match
+        console.log('➕ Creating new match');
+        const insertResult = await supabase.from('matches').insert({
+          championship_id: championshipId,
+          winner_id: winnerId,
+          loser_id: loserId,
+          played_at: new Date().toISOString(),
+          is_scheduled: false,
+          is_validated: true, // Imposta subito a true per calcolare l'ELO
+          score: scoreStr,
+          reported_by: user.id,
+        });
+        
+        error = insertResult.error;
+      }
+
+      if (error) throw error;
+
+      toast({
+        title: 'Successo',
+        description: 'Risultato registrato!',
+      });
+
+      handleCloseRegisterResult();
+      fetchData();
+    } catch (error: any) {
+      console.error('Error registering result:', error);
+      toast({
+        title: 'Errore',
+        description: error.message || 'Impossibile registrare il risultato',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const generateTimeSlots = () => {
+    const slots = [];
+    for (let hour = 8; hour <= 22; hour++) {
+      for (let minute = 0; minute < 60; minute += 30) {
+        const time = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+        slots.push(time);
+      }
+    }
+    return slots;
+  };
+
+  if (loading) {
+    return (
+      <div className="p-6 pb-24 space-y-6">
+        <div className="animate-pulse space-y-4">
+          {[...Array(3)].map((_, i) => (
+            <Card key={i}>
+              <CardContent className="p-6">
+                <div className="h-20 bg-muted rounded"></div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6 pb-24 space-y-6 bg-gradient-to-br from-tennis-court/5 via-background to-tennis-ball/5 min-h-full">
+      <div>
+        <h1 className="text-3xl font-bold text-tennis-court">Le Mie Sfide</h1>
+        <p className="text-muted-foreground">Gestione partite e risultati</p>
+      </div>
+
+      {/* Scheduled Matches - SOLO FUTURE */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CalendarIcon className="h-5 w-5 text-tennis-court" />
+            Sfide Programmate
+            {scheduledMatches.length > 0 && (
+              <Badge variant="outline" className="ml-2">
+                {scheduledMatches.length}
+              </Badge>
+            )}
+          </CardTitle>
+          <CardDescription>Prossime partite in calendario</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {scheduledMatches.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <Swords className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>Nessuna sfida programmata</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {scheduledMatches.map((match) => {
+                const player1Id = match.winner_id;
+                const player2Id = match.loser_id;
+                const matchDate = new Date(match.played_at);
+                
+                return (
+                  <div
+                    key={match.id}
+                    className="flex items-center gap-4 p-4 bg-muted/30 rounded-lg border-l-4 border-tennis-court"
+                  >
+                    {/* Players Column */}
+                    <div className="flex-1">
+                      {/* Player 1 */}
+                      <div className="flex items-center gap-3 mb-2">
+                        <Avatar className="h-12 w-12 shadow-[0_0_15px_rgba(139,195,74,0.4)]">
+                          {getPlayerAvatar(player1Id) ? (
+                            <img 
+                              src={getPlayerAvatar(player1Id)!} 
+                              alt={getPlayerName(player1Id)}
+                              className="object-cover"
+                            />
+                          ) : (
+                            <AvatarFallback className="bg-tennis-court/10 text-tennis-court">
+                              {getPlayerInitials(player1Id)}
+                            </AvatarFallback>
+                          )}
+                        </Avatar>
+                        <div>
+                          <p className="font-medium">{getPlayerName(player1Id)}</p>
+                          {player1Id === user?.id && (
+                            <Badge variant="outline" className="text-xs mt-1">Tu</Badge>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* VS Divider */}
+                      <div className="flex items-center gap-2 ml-6 my-1">
+                        <div className="h-px bg-border flex-1"></div>
+                        <span className="text-xs text-muted-foreground font-semibold">VS</span>
+                        <div className="h-px bg-border flex-1"></div>
+                      </div>
+                      
+                      {/* Player 2 */}
+                      <div className="flex items-center gap-3 mt-2">
+                        <Avatar className="h-12 w-12 shadow-[0_0_15px_rgba(139,195,74,0.4)]">
+                          {getPlayerAvatar(player2Id) ? (
+                            <img 
+                              src={getPlayerAvatar(player2Id)!} 
+                              alt={getPlayerName(player2Id)}
+                              className="object-cover"
+                            />
+                          ) : (
+                            <AvatarFallback className="bg-muted">
+                              {getPlayerInitials(player2Id)}
+                            </AvatarFallback>
+                          )}
+                        </Avatar>
+                        <div>
+                          <p className="font-medium">{getPlayerName(player2Id)}</p>
+                          {player2Id === user?.id && (
+                            <Badge variant="outline" className="text-xs mt-1">Tu</Badge>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Time Column */}
+                    <div className="flex flex-col items-center justify-center gap-2 px-4 py-2 bg-tennis-court/10 rounded-lg border border-tennis-court/20 min-w-[120px]">
+                      <CalendarIcon className="h-5 w-5 text-tennis-court" />
+                      <div className="text-center">
+                        <p className="text-sm font-semibold text-tennis-court">
+                          {format(matchDate, 'dd MMM', { locale: it })}
+                        </p>
+                        <div className="flex items-center justify-center gap-1 mt-1">
+                          <Clock className="h-3 w-3 text-muted-foreground" />
+                          <p className="text-xs text-muted-foreground font-medium">
+                            {format(matchDate, 'HH:mm', { locale: it })}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Match da Registrare - Sfide passate senza risultato */}
+      {matchesToRegister.length > 0 && (
+        <Card className="border-orange-500/50 bg-orange-50/10">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-orange-600">
+              <FileCheck className="h-5 w-5" />
+              Partite da Registrare
+              <Badge variant="outline" className="ml-2 border-orange-600 text-orange-600">
+                {matchesToRegister.length}
+              </Badge>
+            </CardTitle>
+            <CardDescription>Partite già giocate che necessitano del risultato</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {matchesToRegister.map((match) => {
+              const player1Id = match.winner_id;
+              const player2Id = match.loser_id;
+              const matchDate = new Date(match.played_at);
+              
+              return (
+                <div key={match.id} className="space-y-2">
+                  {/* Date Header */}
+                  <div className="flex items-center gap-2 px-2">
+                    <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                    <p className="text-xs text-muted-foreground font-medium">
+                      {format(matchDate, 'PPP', { locale: it })}
+                    </p>
+                  </div>
+                  
+                  {/* Match Card */}
+                  <div className="flex items-center gap-4 p-4 bg-background rounded-lg border-l-4 border-orange-500">
+                    {/* Players Column */}
+                    <div className="flex-1">
+                      {/* Player 1 */}
+                      <div className="flex items-center gap-3 mb-2">
+                        <Avatar className="h-12 w-12 shadow-[0_0_15px_rgba(249,115,22,0.4)]">
+                          {getPlayerAvatar(player1Id) ? (
+                            <img 
+                              src={getPlayerAvatar(player1Id)!} 
+                              alt={getPlayerName(player1Id)}
+                              className="object-cover"
+                            />
+                          ) : (
+                            <AvatarFallback className="bg-orange-500/10 text-orange-600">
+                              {getPlayerInitials(player1Id)}
+                            </AvatarFallback>
+                          )}
+                        </Avatar>
+                        <div>
+                          <p className="font-medium">{getPlayerName(player1Id)}</p>
+                          {player1Id === user?.id && (
+                            <Badge variant="outline" className="text-xs mt-1">Tu</Badge>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* VS Divider */}
+                      <div className="flex items-center gap-2 ml-6 my-1">
+                        <div className="h-px bg-border flex-1"></div>
+                        <span className="text-xs text-muted-foreground font-semibold">VS</span>
+                        <div className="h-px bg-border flex-1"></div>
+                      </div>
+                      
+                      {/* Player 2 */}
+                      <div className="flex items-center gap-3 mt-2">
+                        <Avatar className="h-12 w-12 shadow-[0_0_15px_rgba(249,115,22,0.4)]">
+                          {getPlayerAvatar(player2Id) ? (
+                            <img 
+                              src={getPlayerAvatar(player2Id)!} 
+                              alt={getPlayerName(player2Id)}
+                              className="object-cover"
+                            />
+                          ) : (
+                            <AvatarFallback className="bg-muted">
+                              {getPlayerInitials(player2Id)}
+                            </AvatarFallback>
+                          )}
+                        </Avatar>
+                        <div>
+                          <p className="font-medium">{getPlayerName(player2Id)}</p>
+                          {player2Id === user?.id && (
+                            <Badge variant="outline" className="text-xs mt-1">Tu</Badge>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Action Button */}
+                    <Button 
+                      size="lg" 
+                      className="bg-orange-600 hover:bg-orange-700 min-w-[120px]"
+                      onClick={() => handleOpenRegisterResult(match)}
+                    >
+                      <FileCheck className="h-4 w-4 mr-2" />
+                      Registra
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Match History */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <History className="h-5 w-5 text-tennis-court" />
+            Storico Partite
+            {matchHistory.length > 0 && (
+              <Badge variant="outline" className="ml-2">
+                {matchHistory.length}
+              </Badge>
+            )}
+          </CardTitle>
+          <CardDescription>Ultime 3 partite giocate</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {matchHistory.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <History className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>Nessuna partita giocata</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {matchHistory.map((match) => {
+                const isWinner = match.winner_id === user?.id;
+                
+                return (
+                  <div
+                    key={match.id} 
+                    className={`p-3 rounded-lg ${
+                      isWinner
+                        ? 'bg-green-500/10 border border-green-500/20'
+                        : 'bg-red-500/10 border border-red-500/20'
+                    } space-y-2`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Trophy className={`h-5 w-5 ${
+                          isWinner 
+                            ? 'text-green-600' 
+                            : 'text-red-600'
+                        }`} />
+                        <div>
+                          <p className="font-medium text-sm">
+                            {`${isWinner ? 'Vittoria' : 'Sconfitta'} vs ${getPlayerName(isWinner ? match.loser_id : match.winner_id)}`}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {format(new Date(match.played_at), 'PPP - HH:mm', { locale: it })}
+                          </p>
+                        </div>
+                      </div>
+                      <Badge variant={isWinner ? "default" : "secondary"}>
+                        {match.score}
+                      </Badge>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Action Buttons */}
+      <div className="grid grid-cols-1 gap-3">
+        <Button
+          onClick={handleOpenNewChallenge}
+          className="w-full bg-tennis-court hover:bg-tennis-court/90 text-white h-14 text-lg"
+        >
+          <Plus className="h-5 w-5 mr-2" />
+          Nuova Sfida
+        </Button>
+      </div>
+
+      {/* New Challenge Dialog - TRUNCATED FOR SIZE LIMIT */}
+    </div>
+  );
+};
+
+export default Challenges;
