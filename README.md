@@ -1,73 +1,171 @@
-# Welcome to your Lovable project
+# 🎾 Tennis Race
 
-## Project info
+**Tennis Race** è un'applicazione web completa per la gestione di campionati di tennis con sistema di ranking dinamico, sfide tra giocatori e classifiche mensili.
 
-**URL**: https://lovable.dev/projects/ebd9d43b-c335-4443-870f-7ad1e626f2f9
+## 🌟 Caratteristiche Principali
 
-## How can I edit this code?
+### Sistema di Ranking Live
+- **3 Categorie**: Gold, Silver, Bronze (10 giocatori per categoria)
+- **Posizioni dinamiche**: Le posizioni cambiano in base ai risultati dei match
+- **Scambio posizioni**: Chi vince scala la classifica automaticamente
+- **Best Rank**: Tracciamento della miglior posizione mai raggiunta
 
-There are several ways of editing your application.
+### Classifica Pro Master
+- **Sistema a punti**: Vincitore +3 punti, Perdente +1 punto
+- **Premi mensili**: I primi classificati ricevono punti bonus a fine mese
+- **Requisito minimo**: Numero minimo di partite mensili per ricevere punti
 
-**Use Lovable**
+### Sistema di Sfide (Challenges)
+- I giocatori possono sfidare avversari posizionati meglio in classifica
+- Invio automatico di email di notifica
+- Gestione sfide accettate/rifiutate/in attesa
+- Registrazione risultati con scambio automatico delle posizioni
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/ebd9d43b-c335-4443-870f-7ad1e626f2f9) and start prompting.
+### Gestione Match
+- **Match programmati**: Possibilità di programmare match futuri
+- **Storico completo**: Visualizzazione di tutti i match giocati
+- **Statistiche dettagliate**: Vittorie, sconfitte, set vinti/persi
+- **Dashboard admin**: Creazione e gestione match da parte degli amministratori
 
-Changes made via Lovable will be committed automatically to this repo.
+### Trofei e Riconoscimenti
+- Trofei automatici per le prime posizioni mensili
+- Sistema di assegnazione trofei personalizzabili
+- Visualizzazione trofei nel profilo giocatore
 
-**Use your preferred IDE**
+### Profili Giocatore
+- Avatar personalizzabile
+- Statistiche complete (vittorie, sconfitte, percentuali)
+- Grafici annuali delle performance
+- Storico trofei vinti
+- Link diretto WhatsApp per contattare i giocatori
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+### Snapshot Mensili
+- Salvataggio automatico delle classifiche a fine mese
+- Storico completo delle posizioni mensili
+- Sistema di retrocessione per inattività
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+## 🛠️ Tecnologie Utilizzate
 
-Follow these steps:
+- **Frontend**: React 18 + TypeScript
+- **Build Tool**: Vite
+- **Styling**: Tailwind CSS + shadcn/ui
+- **Backend**: Supabase (PostgreSQL)
+- **Autenticazione**: Supabase Auth
+- **Storage**: Supabase Storage (per avatar)
+- **Email**: Servizio email integrato per notifiche sfide
+- **Routing**: React Router v6
+- **Charts**: Recharts
+- **Forms**: React Hook Form + Zod
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+## 📦 Installazione
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+### Prerequisiti
 
-# Step 3: Install the necessary dependencies.
-npm i
+- Node.js 18+ e npm
+- Account Supabase
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+### Setup Locale
+
+1. **Clona il repository**
+```bash
+git clone https://github.com/liveranialessio-a11y/tennis-race.git
+cd tennis-race
+```
+
+2. **Installa le dipendenze**
+```bash
+npm install
+```
+
+3. **Configura le variabili d'ambiente**
+
+Crea un file `.env` nella root del progetto copiando il template `.env.example`:
+
+```bash
+cp .env.example .env
+```
+
+Modifica il file `.env` con le tue credenziali Supabase:
+
+```env
+VITE_SUPABASE_PROJECT_ID="tuo_project_id"
+VITE_SUPABASE_PUBLISHABLE_KEY="tua_publishable_key"
+VITE_SUPABASE_URL="https://tuo_project_id.supabase.co"
+
+VITE_EMAIL_USER="tua_email@gmail.com"
+VITE_EMAIL_PASSWORD="tua_app_password"
+```
+
+4. **Configura il database Supabase**
+
+Esegui le migration nella cartella `supabase/migrations/` nel seguente ordine:
+- `00_final_consolidated_schema.sql` (schema completo del database)
+- Tutte le altre migration in ordine cronologico
+
+5. **Avvia il server di sviluppo**
+```bash
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+L'app sarà disponibile su `http://localhost:5173`
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## 📁 Struttura del Progetto
 
-**Use GitHub Codespaces**
+```
+tennis-race/
+├── src/
+│   ├── components/         # Componenti React riutilizzabili
+│   │   ├── ui/            # Componenti shadcn/ui
+│   │   └── layout/        # Layout dell'app (Header, BottomNav)
+│   ├── pages/             # Pagine dell'applicazione
+│   ├── contexts/          # React Context (Auth)
+│   ├── hooks/             # Custom React Hooks
+│   ├── integrations/      # Integrazione Supabase
+│   └── services/          # Servizi (email, ecc.)
+├── supabase/
+│   ├── migrations/        # Migration SQL del database
+│   └── functions/         # Edge Functions Supabase
+└── public/                # Asset statici
+```
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## 🚀 Deployment
 
-## What technologies are used for this project?
+### Deploy su Vercel/Netlify
 
-This project is built with:
+1. Collega il repository GitHub
+2. Configura le variabili d'ambiente nel dashboard
+3. Deploy automatico ad ogni push su `main`
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+### Variabili d'Ambiente di Produzione
 
-## How can I deploy this project?
+Assicurati di configurare tutte le variabili d'ambiente nel tuo servizio di hosting:
+- `VITE_SUPABASE_PROJECT_ID`
+- `VITE_SUPABASE_PUBLISHABLE_KEY`
+- `VITE_SUPABASE_URL`
+- `VITE_EMAIL_USER`
+- `VITE_EMAIL_PASSWORD`
 
-Simply open [Lovable](https://lovable.dev/projects/ebd9d43b-c335-4443-870f-7ad1e626f2f9) and click on Share -> Publish.
+## 🔒 Sicurezza
 
-## Can I connect a custom domain to my Lovable project?
+- Il file `.env` è escluso dal repository tramite `.gitignore`
+- Le credenziali sensibili non sono mai committate
+- Autenticazione gestita tramite Supabase Auth
+- Row Level Security (RLS) abilitata su tutte le tabelle
 
-Yes, you can!
+## 🤝 Contribuire
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+Questo è un progetto privato. Per contribuire, contatta il proprietario del repository.
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+## 📄 Licenza
+
+Progetto privato - Tutti i diritti riservati
+
+## 👨‍💻 Autore
+
+**Alessio Liverani**
+- Email: tennisrace.app@gmail.com
+- GitHub: [@liveranialessio-a11y](https://github.com/liveranialessio-a11y)
+
+---
+
+🎾 **Tennis Race** - Gestione campionati di tennis resa semplice
