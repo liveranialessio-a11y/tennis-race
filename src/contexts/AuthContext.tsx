@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -35,37 +35,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isCheckingProfile, setIsCheckingProfile] = useState(false);
   const [profileChecked, setProfileChecked] = useState(false);
 
-  useEffect(() => {
-    // Check for existing session first
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-
-      // Create profile if user is logged in
-      if (session?.user) {
-        ensurePlayerProfile(session.user);
-      }
-    });
-
-    // Set up auth state listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        setLoading(false);
-
-        // Handle successful login/signup - ensure profile exists
-        if (event === 'SIGNED_IN' && session?.user) {
-          await ensurePlayerProfile(session.user);
-        }
-      }
-    );
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const ensurePlayerProfile = async (user: User) => {
+  const ensurePlayerProfile = useCallback(async (user: User) => {
     // Prevent duplicate calls
     if (isCheckingProfile || profileChecked) {
       return;
@@ -152,7 +122,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsCheckingProfile(false);
       setCheckingPlayerStatus(false);
     }
-  };
+  }, [isCheckingProfile, profileChecked, toast]);
+
+  useEffect(() => {
+    // Check for existing session first
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      setLoading(false);
+
+      // Create profile if user is logged in
+      if (session?.user) {
+        ensurePlayerProfile(session.user);
+      } else {
+        setHasPlayer(null);
+        setCheckingPlayerStatus(false);
+      }
+    });
+
+    // Set up auth state listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        setSession(session);
+        setUser(session?.user ?? null);
+        setLoading(false);
+
+        // Handle successful login/signup - ensure profile exists
+        if (event === 'SIGNED_IN' && session?.user) {
+          await ensurePlayerProfile(session.user);
+        } else if (event === 'SIGNED_OUT') {
+          setHasPlayer(null);
+          setCheckingPlayerStatus(false);
+          setProfileChecked(false);
+        }
+      }
+    );
+
+    return () => subscription.unsubscribe();
+  }, [ensurePlayerProfile]);
 
   const uploadAvatar = async (userId: string, avatarFile: File): Promise<string | null> => {
     try {
