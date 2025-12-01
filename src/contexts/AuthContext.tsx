@@ -39,19 +39,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setCheckingPlayerStatus(true);
       console.log('⏳ [DEBUG] Set checkingPlayerStatus to TRUE');
 
+      // Add timeout to prevent infinite loading
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Query timeout after 5 seconds')), 5000)
+      );
+
       // Run queries in parallel to reduce load time
-      const [playerResult, requestResult] = await Promise.allSettled([
-        supabase
-          .from('players')
-          .select('id')
-          .eq('user_id', user.id)
-          .maybeSingle(),
-        supabase
-          .from('registration_requests' as any)
-          .select('id, status')
-          .eq('user_id', user.id)
-          .maybeSingle()
-      ]);
+      const [playerResult, requestResult] = await Promise.race([
+        Promise.allSettled([
+          supabase
+            .from('players')
+            .select('id')
+            .eq('user_id', user.id)
+            .maybeSingle(),
+          supabase
+            .from('registration_requests' as any)
+            .select('id, status')
+            .eq('user_id', user.id)
+            .maybeSingle()
+        ]),
+        timeoutPromise
+      ]) as any;
 
       console.log('📊 [DEBUG] Query results:', {
         player: playerResult.status === 'fulfilled' ? !!playerResult.value.data : 'error',
