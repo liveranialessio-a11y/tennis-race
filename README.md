@@ -168,4 +168,4 @@ Progetto privato - Tutti i diritti riservati
 
 ---
 
-🎾 **Tennis Race** - Gestione campionati di tennis resa semplice
+🎾 **Tennis Race** - Gestione campionati di tennis resa semplice e intuitiva
