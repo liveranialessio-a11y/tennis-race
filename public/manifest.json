@@ -9,14 +9,14 @@
   "orientation": "portrait",
   "icons": [
     {
-      "src": "/tennis-icon.png",
-      "type": "image/png",
+      "src": "/tennis-logo.jpg",
+      "type": "image/jpeg",
       "sizes": "192x192",
       "purpose": "any"
     },
     {
-      "src": "/tennis-icon.png",
-      "type": "image/png",
+      "src": "/tennis-logo.jpg",
+      "type": "image/jpeg",
       "sizes": "512x512",
       "purpose": "maskable"
     }
