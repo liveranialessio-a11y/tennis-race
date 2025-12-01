@@ -60,7 +60,9 @@ const BottomNav: React.FC = () => {
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-card/95 backdrop-blur-sm border-t border-tennis-court/20 shadow-lg">
       <div className={`flex items-center justify-around h-16 max-w-lg mx-auto px-4 ${isAdmin ? 'gap-1' : ''}`}>
         {navItems.map((item) => {
-          const isActive = location.pathname === item.path;
+          // Consider both /championships and / (root) as championships page
+          const isActive = location.pathname === item.path ||
+            (item.path === '/championships' && location.pathname === '/');
           const Icon = item.icon;
 
           return (
