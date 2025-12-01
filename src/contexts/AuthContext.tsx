@@ -96,10 +96,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (insertError) {
         // If error is 409 (conflict), it means the registration request already exists
         if (insertError.code === '23505' || insertError.message?.includes('duplicate')) {
-          console.log('✅ Registration request already exists');
           setHasPlayer(false);
         } else {
-          console.error('❌ Error creating registration request:', insertError);
+          console.error('Error creating registration request:', insertError);
           setHasPlayer(null);
         }
       } else {
@@ -107,7 +106,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
     } catch (error: any) {
-      console.error('❌ Error in ensurePlayerProfile:', error);
+      console.error('Error in ensurePlayerProfile:', error);
       setHasPlayer(null);
     } finally {
       setCheckingPlayerStatus(false);
@@ -115,11 +114,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   useEffect(() => {
+    let initialCheckDone = false;
+
     // Check for existing session first
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      // If there's an error with the session, clear it
+      if (error) {
+        supabase.auth.signOut();
+      }
+
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+      initialCheckDone = true;
 
       // Create profile if user is logged in
       if (session?.user) {
@@ -133,6 +140,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        // Ignore SIGNED_OUT events that happen during initial load
+        // This prevents the loop when an invalid token is cleared
+        if (event === 'SIGNED_OUT' && !initialCheckDone) {
+          return;
+        }
+
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
@@ -147,7 +160,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+    };
   }, [ensurePlayerProfile]);
 
   const uploadAvatar = async (userId: string, avatarFile: File): Promise<string | null> => {
