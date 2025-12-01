@@ -7,6 +7,8 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
+  hasPlayer: boolean | null;
+  checkingPlayerStatus: boolean;
   signUp: (email: string, password: string, firstName: string, lastName: string, phone: string, avatarFile: File | null) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
@@ -27,6 +29,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [hasPlayer, setHasPlayer] = useState<boolean | null>(null);
+  const [checkingPlayerStatus, setCheckingPlayerStatus] = useState(false);
   const { toast } = useToast();
   const [isCheckingProfile, setIsCheckingProfile] = useState(false);
   const [profileChecked, setProfileChecked] = useState(false);
@@ -69,69 +73,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       setIsCheckingProfile(true);
+      setCheckingPlayerStatus(true);
 
-      // Add timeout to prevent hanging (3 seconds is enough for most cases)
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Query timeout')), 3000)
-      );
+      // Run queries in parallel to reduce load time
+      const [playerResult, requestResult] = await Promise.allSettled([
+        supabase
+          .from('players')
+          .select('id')
+          .eq('user_id', user.id)
+          .maybeSingle(),
+        supabase
+          .from('registration_requests' as any)
+          .select('id, status')
+          .eq('user_id', user.id)
+          .maybeSingle()
+      ]);
 
-      // Check if user already has a player record (already approved)
-      const playerQuery = supabase
-        .from('players')
-        .select('id')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      const { data: existingPlayer, error: playerError } = await Promise.race([
-        playerQuery,
-        timeoutPromise
-      ]) as any;
-
-      if (playerError) {
-        console.error('❌ Error checking player:', playerError);
-      }
-
-      if (existingPlayer) {
+      // Check player result
+      if (playerResult.status === 'fulfilled' && playerResult.value.data) {
+        setHasPlayer(true);
         setProfileChecked(true);
+        setCheckingPlayerStatus(false);
         return;
       }
 
-      // Check if user already has a pending registration request
-      const requestQuery = supabase
-        .from('registration_requests' as any)
-        .select('id, status')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      const { data: existingRequest, error: requestError } = await Promise.race([
-        requestQuery,
-        timeoutPromise
-      ]) as any;
-
-      if (requestError) {
-        console.error('❌ Error checking registration request:', requestError);
-      }
-
-      if (existingRequest) {
+      // Check registration request result
+      if (requestResult.status === 'fulfilled' && requestResult.value.data) {
+        setHasPlayer(false);
         setProfileChecked(true);
+        setCheckingPlayerStatus(false);
         return;
       }
 
+      // Only create registration if both checks failed and it's needed
       // Get default championship ID
-      const champQuery = supabase.rpc('get_default_championship_id' as any);
-
-      const { data: defaultChampId, error: champError } = await Promise.race([
-        champQuery,
-        timeoutPromise
-      ]) as any;
+      const { data: defaultChampId, error: champError } = await supabase.rpc('get_default_championship_id' as any);
 
       if (champError || !defaultChampId) {
         console.error('❌ No default championship found', champError);
-        toast({
-          title: "Errore",
-          description: "Nessun campionato disponibile",
-          variant: "destructive",
-        });
+        setProfileChecked(true);
         return;
       }
 
@@ -154,31 +134,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (insertError) {
         // If error is 409 (conflict), it means the registration request already exists
-        // This is normal after email confirmation, so we just mark as checked
         if (insertError.code === '23505' || insertError.message?.includes('duplicate')) {
           console.log('✅ Registration request already exists');
-          setProfileChecked(true);
         } else {
           console.error('❌ Error creating registration request:', insertError);
-          // Mark as checked to prevent infinite loop
-          setProfileChecked(true);
-          // Redirect to registration error page
-          window.location.href = '/registration-error';
         }
-      } else {
-        setProfileChecked(true);
       }
 
+      setHasPlayer(false);
+      setProfileChecked(true);
+
     } catch (error: any) {
-      // If timeout or other error, just log and continue
-      // Don't block the user from accessing the app
-      if (error?.message === 'Query timeout') {
-        // Query timeout - skipping profile check (this is normal on slow connections)
-      } else {
-        console.error('❌ Error in ensurePlayerProfile:', error);
-      }
+      console.error('❌ Error in ensurePlayerProfile:', error);
+      setHasPlayer(null);
+      setProfileChecked(true);
     } finally {
       setIsCheckingProfile(false);
+      setCheckingPlayerStatus(false);
     }
   };
 
@@ -314,6 +286,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     user,
     session,
     loading,
+    hasPlayer,
+    checkingPlayerStatus,
     signUp,
     signIn,
     signOut,

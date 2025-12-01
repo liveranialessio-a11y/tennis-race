@@ -1,0 +1,52 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Sfondo trasparente -->
+  <defs>
+    <!-- Gradiente per la pallina -->
+    <radialGradient id="ballGrad" cx="35%" cy="35%">
+      <stop offset="0%" style="stop-color:#F4FF81;stop-opacity:1" />
+      <stop offset="40%" style="stop-color:#DFEA4C;stop-opacity:1" />
+      <stop offset="80%" style="stop-color:#C5D54E;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#A8C740;stop-opacity:1" />
+    </radialGradient>
+
+    <!-- Ombra -->
+    <filter id="shadow">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="8"/>
+      <feOffset dx="4" dy="8" result="offsetblur"/>
+      <feComponentTransfer>
+        <feFuncA type="linear" slope="0.3"/>
+      </feComponentTransfer>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Pallina principale con ombra -->
+  <g filter="url(#shadow)">
+    <circle cx="256" cy="256" r="180" fill="url(#ballGrad)"/>
+
+    <!-- Curve bianche della pallina da tennis -->
+    <path d="M 130,200 Q 190,140 256,130 Q 322,140 382,200"
+          stroke="white" stroke-width="18" fill="none" stroke-linecap="round"/>
+    <path d="M 130,312 Q 190,372 256,382 Q 322,372 382,312"
+          stroke="white" stroke-width="18" fill="none" stroke-linecap="round"/>
+
+    <!-- Curve più sottili per realismo -->
+    <path d="M 135,205 Q 190,150 256,140 Q 322,150 377,205"
+          stroke="white" stroke-width="10" fill="none" stroke-linecap="round" opacity="0.6"/>
+    <path d="M 135,307 Q 190,362 256,372 Q 322,362 377,307"
+          stroke="white" stroke-width="10" fill="none" stroke-linecap="round" opacity="0.6"/>
+
+    <!-- Highlight per effetto 3D -->
+    <ellipse cx="210" cy="210" rx="60" ry="80" fill="white" opacity="0.3"
+             transform="rotate(-25 210 210)"/>
+    <ellipse cx="200" cy="200" rx="35" ry="50" fill="white" opacity="0.5"
+             transform="rotate(-25 200 200)"/>
+
+    <!-- Texture/dettagli -->
+    <circle cx="256" cy="256" r="180" fill="none" stroke="#9FA836"
+            stroke-width="2" opacity="0.3"/>
+  </g>
+</svg>

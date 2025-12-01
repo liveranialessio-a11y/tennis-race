@@ -37,7 +37,17 @@
       "Bash(ping:*)",
       "Bash(git add:*)",
       "Bash(git init:*)",
-      "Bash(git config:*)"
+      "Bash(git config:*)",
+      "Bash(git commit:*)",
+      "Bash(git remote add:*)",
+      "Bash(git branch:*)",
+      "Bash(git push:*)",
+      "Bash(echo:*)",
+      "Bash(git ls-tree:*)",
+      "Bash(git fetch:*)",
+      "Bash(npm run build:*)",
+      "Bash(npx vercel:*)",
+      "Bash(magick:*)"
     ],
     "deny": [],
     "ask": []

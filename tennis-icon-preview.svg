@@ -1,0 +1,79 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Gradiente per la pallina giallo-verde -->
+    <radialGradient id="ballGradient" cx="35%" cy="35%">
+      <stop offset="0%" style="stop-color:#E8F48C;stop-opacity:1" />
+      <stop offset="30%" style="stop-color:#D4E157;stop-opacity:1" />
+      <stop offset="60%" style="stop-color:#C0CA33;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#9E9D24;stop-opacity:1" />
+    </radialGradient>
+
+    <!-- Gradiente per la scia di movimento -->
+    <linearGradient id="trailGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#7CB342;stop-opacity:0.6" />
+      <stop offset="50%" style="stop-color:#558B2F;stop-opacity:0.4" />
+      <stop offset="100%" style="stop-color:#33691E;stop-opacity:0.2" />
+    </linearGradient>
+
+    <!-- Ombra della pallina -->
+    <radialGradient id="shadowGradient">
+      <stop offset="0%" style="stop-color:#000000;stop-opacity:0.3" />
+      <stop offset="100%" style="stop-color:#000000;stop-opacity:0" />
+    </radialGradient>
+
+    <!-- Texture per effetto feltro -->
+    <filter id="noise">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="4" />
+      <feColorMatrix type="saturate" values="0"/>
+      <feBlend mode="multiply" in="SourceGraphic"/>
+    </filter>
+  </defs>
+
+  <!-- Scia di movimento curva (come nell'immagine) -->
+  <path d="M 120,380 Q 180,340 220,300 Q 240,280 260,260"
+        stroke="url(#trailGradient)"
+        stroke-width="35"
+        fill="none"
+        stroke-linecap="round"
+        opacity="0.7"/>
+
+  <path d="M 100,400 Q 160,360 200,320 Q 220,300 240,280"
+        stroke="url(#trailGradient)"
+        stroke-width="25"
+        fill="none"
+        stroke-linecap="round"
+        opacity="0.5"/>
+
+  <!-- Ombra sotto la pallina -->
+  <ellipse cx="290" cy="450" rx="80" ry="20" fill="url(#shadowGradient)" opacity="0.4"/>
+
+  <!-- Pallina da tennis principale -->
+  <circle cx="310" cy="230" r="130" fill="url(#ballGradient)" filter="url(#noise)"/>
+
+  <!-- Bordo scuro della pallina -->
+  <circle cx="310" cy="230" r="130" fill="none" stroke="#7CB342" stroke-width="3" opacity="0.6"/>
+
+  <!-- Curve bianche caratteristiche del tennis (più realistiche) -->
+  <g stroke="white" stroke-width="12" fill="none" stroke-linecap="round">
+    <!-- Curva superiore -->
+    <path d="M 210,180 Q 260,160 310,180 Q 360,200 410,180" opacity="0.95"/>
+    <path d="M 215,185 Q 260,167 310,185 Q 360,203 405,185" opacity="0.7" stroke-width="8"/>
+
+    <!-- Curva inferiore -->
+    <path d="M 210,280 Q 260,300 310,280 Q 360,260 410,280" opacity="0.95"/>
+    <path d="M 215,275 Q 260,293 310,275 Q 360,257 405,275" opacity="0.7" stroke-width="8"/>
+  </g>
+
+  <!-- Highlight per effetto 3D -->
+  <ellipse cx="280" cy="200" rx="50" ry="60" fill="white" opacity="0.25"
+           transform="rotate(-20 280 200)"/>
+  <ellipse cx="270" cy="190" rx="30" ry="40" fill="white" opacity="0.4"
+           transform="rotate(-20 270 190)"/>
+
+  <!-- Ombra interna per profondità -->
+  <path d="M 310,230 m -130,0 a 130,130 0 0,0 180,90"
+        fill="none"
+        stroke="#9E9D24"
+        stroke-width="8"
+        opacity="0.3"/>
+</svg>
