@@ -32,17 +32,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [hasPlayer, setHasPlayer] = useState<boolean | null>(null);
   const [checkingPlayerStatus, setCheckingPlayerStatus] = useState(false);
   const { toast } = useToast();
-  const [isCheckingProfile, setIsCheckingProfile] = useState(false);
-  const [profileChecked, setProfileChecked] = useState(false);
 
   const ensurePlayerProfile = useCallback(async (user: User) => {
-    // Prevent duplicate calls
-    if (isCheckingProfile || profileChecked) {
-      return;
-    }
-
     try {
-      setIsCheckingProfile(true);
       setCheckingPlayerStatus(true);
 
       // Run queries in parallel to reduce load time
@@ -62,7 +54,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Check player result
       if (playerResult.status === 'fulfilled' && playerResult.value.data) {
         setHasPlayer(true);
-        setProfileChecked(true);
         setCheckingPlayerStatus(false);
         return;
       }
@@ -70,7 +61,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Check registration request result
       if (requestResult.status === 'fulfilled' && requestResult.value.data) {
         setHasPlayer(false);
-        setProfileChecked(true);
         setCheckingPlayerStatus(false);
         return;
       }
@@ -81,7 +71,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (champError || !defaultChampId) {
         console.error('❌ No default championship found', champError);
-        setProfileChecked(true);
+        setHasPlayer(null);
+        setCheckingPlayerStatus(false);
         return;
       }
 
@@ -106,23 +97,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // If error is 409 (conflict), it means the registration request already exists
         if (insertError.code === '23505' || insertError.message?.includes('duplicate')) {
           console.log('✅ Registration request already exists');
+          setHasPlayer(false);
         } else {
           console.error('❌ Error creating registration request:', insertError);
+          setHasPlayer(null);
         }
+      } else {
+        setHasPlayer(false);
       }
-
-      setHasPlayer(false);
-      setProfileChecked(true);
 
     } catch (error: any) {
       console.error('❌ Error in ensurePlayerProfile:', error);
       setHasPlayer(null);
-      setProfileChecked(true);
     } finally {
-      setIsCheckingProfile(false);
       setCheckingPlayerStatus(false);
     }
-  }, [isCheckingProfile, profileChecked, toast]);
+  }, []);
 
   useEffect(() => {
     // Check for existing session first
@@ -153,7 +143,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } else if (event === 'SIGNED_OUT') {
           setHasPlayer(null);
           setCheckingPlayerStatus(false);
-          setProfileChecked(false);
         }
       }
     );
