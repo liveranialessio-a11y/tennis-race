@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -32,10 +32,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [hasPlayer, setHasPlayer] = useState<boolean | null>(null);
   const [checkingPlayerStatus, setCheckingPlayerStatus] = useState(false);
   const { toast } = useToast();
+  const isCheckingRef = useRef(false);
 
   const ensurePlayerProfile = useCallback(async (user: User) => {
     console.log('🔍 [DEBUG] ensurePlayerProfile called for user:', user.id);
+
+    // Prevent multiple simultaneous calls
+    if (isCheckingRef.current) {
+      console.log('⏭️ [DEBUG] Already checking player status, skipping...');
+      return;
+    }
+
     try {
+      isCheckingRef.current = true;
       setCheckingPlayerStatus(true);
       console.log('⏳ [DEBUG] Set checkingPlayerStatus to TRUE');
 
@@ -127,6 +136,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setHasPlayer(null);
     } finally {
       console.log('🏁 [DEBUG] ensurePlayerProfile finished - setting checkingPlayerStatus=FALSE');
+      isCheckingRef.current = false;
       setCheckingPlayerStatus(false);
     }
   }, []);

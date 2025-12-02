@@ -65,6 +65,10 @@ const Challenges: React.FC = () => {
   const [historyFilter, setHistoryFilter] = useState<'all' | 'week' | 'month'>('all');
   const [blockReasonOpen, setBlockReasonOpen] = useState(false);
   const [blockReason, setBlockReason] = useState<'scheduled' | 'toRegister' | 'launchedChallenge' | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [challengeToDelete, setChallengeToDelete] = useState<string | null>(null);
+  const [rejectConfirmOpen, setRejectConfirmOpen] = useState(false);
+  const [challengeToReject, setChallengeToReject] = useState<string | null>(null);
 
   // New filter states for full history
   const [historyFilterType, setHistoryFilterType] = useState<'month' | 'year' | 'all'>('all');
@@ -727,8 +731,19 @@ const Challenges: React.FC = () => {
     }
   };
 
-  const handleDeleteChallenge = async (matchId: string) => {
-    if (!user?.id) return;
+  const openDeleteConfirm = (matchId: string) => {
+    console.log('🗑️ [DEBUG] openDeleteConfirm called with matchId:', matchId);
+    setChallengeToDelete(matchId);
+    setDeleteConfirmOpen(true);
+    console.log('🗑️ [DEBUG] deleteConfirmOpen set to TRUE');
+  };
+
+  const handleDeleteChallenge = async () => {
+    if (!user?.id || !challengeToDelete) return;
+
+    const matchId = challengeToDelete;
+    setDeleteConfirmOpen(false);
+    setChallengeToDelete(null);
 
     try {
       // Prima ottieni i dati della sfida per inviare email
@@ -975,8 +990,17 @@ const Challenges: React.FC = () => {
     }
   };
 
-  const handleRejectChallenge = async (challengeId: string) => {
-    if (!user?.id) return;
+  const openRejectConfirm = (challengeId: string) => {
+    setChallengeToReject(challengeId);
+    setRejectConfirmOpen(true);
+  };
+
+  const handleRejectChallenge = async () => {
+    if (!user?.id || !challengeToReject) return;
+
+    const challengeId = challengeToReject;
+    setRejectConfirmOpen(false);
+    setChallengeToReject(null);
 
     try {
       const { data, error } = await supabase.rpc('reject_challenge', {
@@ -1263,7 +1287,7 @@ const Challenges: React.FC = () => {
                           <Button
                             variant="destructive"
                             size="sm"
-                            onClick={() => handleRejectChallenge(challenge.id)}
+                            onClick={() => openRejectConfirm(challenge.id)}
                             className="w-full bg-red-600 hover:bg-red-700"
                           >
                             <XCircle className="h-4 w-4 mr-1" />
@@ -1312,7 +1336,7 @@ const Challenges: React.FC = () => {
                         <Button
                           variant="destructive"
                           size="sm"
-                          onClick={() => handleDeleteChallenge(challenge.id)}
+                          onClick={() => openDeleteConfirm(challenge.id)}
                           className="w-full bg-red-600 hover:bg-red-700"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -1419,7 +1443,7 @@ const Challenges: React.FC = () => {
                       <Button
                         variant="destructive"
                         size="sm"
-                        onClick={() => handleDeleteChallenge(match.id)}
+                        onClick={() => openDeleteConfirm(match.id)}
                         className="w-full bg-red-600 hover:bg-red-700"
                       >
                         <Trash2 className="h-4 w-4 mr-1" />
@@ -1561,7 +1585,7 @@ const Challenges: React.FC = () => {
                       <Button
                         variant="destructive"
                         size="sm"
-                        onClick={() => handleDeleteChallenge(match.id)}
+                        onClick={() => openDeleteConfirm(match.id)}
                         className="w-full bg-red-600 hover:bg-red-700"
                       >
                         <Trash2 className="h-4 w-4 mr-1" />
@@ -1668,7 +1692,7 @@ const Challenges: React.FC = () => {
                       <Button
                         variant="destructive"
                         size="sm"
-                        onClick={() => handleDeleteChallenge(match.id)}
+                        onClick={() => openDeleteConfirm(match.id)}
                         className="w-full"
                       >
                         <Trash2 className="h-4 w-4 mr-1" />
@@ -2811,6 +2835,72 @@ const Challenges: React.FC = () => {
                   <ChevronRight className="h-4 w-4 ml-2" />
                 </>
               )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <DialogContent className="bg-gray-900 text-white border-gray-800">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-red-500">
+              Conferma Eliminazione
+            </DialogTitle>
+            <DialogDescription className="text-gray-300">
+              Sei sicuro di voler eliminare questa sfida? Questa azione non può essere annullata.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-3 justify-end mt-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDeleteConfirmOpen(false);
+                setChallengeToDelete(null);
+              }}
+              className="bg-gray-800 text-white border-gray-700 hover:bg-gray-700"
+            >
+              Annulla
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteChallenge}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Elimina
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reject Confirmation Dialog */}
+      <Dialog open={rejectConfirmOpen} onOpenChange={setRejectConfirmOpen}>
+        <DialogContent className="bg-gray-900 text-white border-gray-800">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-red-500">
+              Conferma Rifiuto
+            </DialogTitle>
+            <DialogDescription className="text-gray-300">
+              Sei sicuro di voler rifiutare questa sfida? Questa azione non può essere annullata.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-3 justify-end mt-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRejectConfirmOpen(false);
+                setChallengeToReject(null);
+              }}
+              className="bg-gray-800 text-white border-gray-700 hover:bg-gray-700"
+            >
+              Annulla
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleRejectChallenge}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Rifiuta
             </Button>
           </div>
         </DialogContent>
