@@ -39,14 +39,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Prevent multiple simultaneous calls
     if (isCheckingRef.current) {
-      console.log('⏭️ [DEBUG] Already checking player status, skipping...');
+      // console.log('⏭️ [DEBUG] ...');
       return;
     }
 
     try {
       isCheckingRef.current = true;
       setCheckingPlayerStatus(true);
-      console.log('⏳ [DEBUG] Set checkingPlayerStatus to TRUE');
+      // console.log('⏳ [DEBUG] ...');
 
       // Add timeout to prevent infinite loading
       const timeoutPromise = new Promise((_, reject) =>
@@ -77,7 +77,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // Check player result
       if (playerResult.status === 'fulfilled' && playerResult.value.data) {
-        console.log('✅ [DEBUG] Has player - setting hasPlayer=TRUE, checkingPlayerStatus=FALSE');
+        // console.log('✅ [DEBUG] ...');
         setHasPlayer(true);
         setCheckingPlayerStatus(false);
         return;
@@ -166,7 +166,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.log('🔄 [DEBUG] Calling ensurePlayerProfile for existing session');
         ensurePlayerProfile(session.user);
       } else {
-        console.log('❌ [DEBUG] No session - setting hasPlayer=NULL, checkingPlayerStatus=FALSE');
+        // console.log('❌ [DEBUG] ...');
         setHasPlayer(null);
         setCheckingPlayerStatus(false);
       }
@@ -180,7 +180,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Ignore SIGNED_OUT events that happen during initial load
         // This prevents the loop when an invalid token is cleared
         if (event === 'SIGNED_OUT' && !initialCheckDone) {
-          console.log('⏭️ [DEBUG] Ignoring SIGNED_OUT during initial load');
+          // console.log('⏭️ [DEBUG] ...');
           return;
         }
 
@@ -190,7 +190,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         // Handle successful login/signup - ensure profile exists
         if (event === 'SIGNED_IN' && session?.user) {
-          console.log('✅ [DEBUG] SIGNED_IN event - calling ensurePlayerProfile');
+          // console.log('✅ [DEBUG] ...');
           await ensurePlayerProfile(session.user);
         } else if (event === 'SIGNED_OUT') {
           console.log('👋 [DEBUG] SIGNED_OUT event - setting hasPlayer=NULL, checkingPlayerStatus=FALSE');

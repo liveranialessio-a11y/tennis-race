@@ -732,10 +732,8 @@ const Challenges: React.FC = () => {
   };
 
   const openDeleteConfirm = (matchId: string) => {
-    console.log('🗑️ [DEBUG] openDeleteConfirm called with matchId:', matchId);
     setChallengeToDelete(matchId);
     setDeleteConfirmOpen(true);
-    console.log('🗑️ [DEBUG] deleteConfirmOpen set to TRUE');
   };
 
   const handleDeleteChallenge = async () => {
