@@ -231,12 +231,13 @@ const Championships: React.FC = () => {
         setTopLivePlayers(top3PerCategory);
 
         // Fetch top 3 players for Pro Master Ranking
+        // Order by points DESC, then by display_name ASC (same as backend function)
         const { data: proMasterData } = await supabase
           .from('players')
           .select('*')
           .eq('championship_id', championshipData.id)
-          .not('pro_master_rank_position', 'is', null)
-          .order('pro_master_rank_position', { ascending: true })
+          .order('pro_master_points', { ascending: false })
+          .order('display_name', { ascending: true })
           .limit(3);
 
         setTopProMasterPlayers(proMasterData || []);
@@ -534,11 +535,13 @@ const Championships: React.FC = () => {
     if (!championship) return;
 
     try {
+      // Order by points DESC, then by display_name ASC (same as backend)
       const { data: playersData } = await supabase
         .from('players')
         .select('*')
         .eq('championship_id', championship.id)
-        .order('pro_master_points', { ascending: false });
+        .order('pro_master_points', { ascending: false })
+        .order('display_name', { ascending: true });
 
       setAllPlayers(playersData || []);
       setShowFullProMasterRanking(true);
