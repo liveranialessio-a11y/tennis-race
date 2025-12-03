@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/components/theme-provider";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import AdminRoute from "@/components/AdminRoute";
 import AppLayout from "@/components/layout/AppLayout";
 import { lazy, Suspense } from "react";
 import TennisLoadingAnimation from "@/components/TennisLoadingAnimation";
@@ -14,7 +15,6 @@ import TennisLoadingAnimation from "@/components/TennisLoadingAnimation";
 const Index = lazy(() => import("./pages/Index"));
 const Login = lazy(() => import("./pages/Login"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
-const ConfirmEmail = lazy(() => import("./pages/ConfirmEmail"));
 const EmailConfirmed = lazy(() => import("./pages/EmailConfirmed"));
 const RegistrationError = lazy(() => import("./pages/RegistrationError"));
 const Championships = lazy(() => import("./pages/Championships"));
@@ -48,7 +48,6 @@ const App = () => (
                 {/* Public routes */}
                 <Route path="/login" element={<Login />} />
                 <Route path="/reset-password" element={<ResetPassword />} />
-                <Route path="/confirm-email" element={<ConfirmEmail />} />
                 <Route path="/email-confirmed" element={<EmailConfirmed />} />
                 <Route path="/registration-error" element={<RegistrationError />} />
 
@@ -95,11 +94,11 @@ const App = () => (
                 <Route
                   path="/admin"
                   element={
-                    <ProtectedRoute>
+                    <AdminRoute>
                       <AppLayout>
                         <AdminMobile />
                       </AppLayout>
-                    </ProtectedRoute>
+                    </AdminRoute>
                   }
                 />
 
