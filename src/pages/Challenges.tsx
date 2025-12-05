@@ -21,6 +21,11 @@ import { Label } from '@/components/ui/label';
 import { sendChallengeEmail, formatDateForEmail, formatTimeForEmail } from '@/services/emailService';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { AvailabilityStatusBadge } from '@/components/suspension/AvailabilityStatusBadge';
+import { SuspendedPlayerDialog } from '@/components/suspension/SuspendedPlayerDialog';
+import { SuspensionReasonDialog } from '@/components/suspension/SuspensionReasonDialog';
+import { UnavailablePlayerDialog } from '@/components/suspension/UnavailablePlayerDialog';
+import { useSuspension } from '@/hooks/useSuspension';
 
 interface Player {
   id: string;
@@ -30,6 +35,12 @@ interface Player {
   avatar_url: string | null;
   live_rank_category: string;
   phone?: string | null;
+  availability_status?: 'available' | 'unavailable' | 'suspended';
+  suspension?: {
+    start_date: string;
+    end_date: string;
+    reason: string;
+  } | null;
 }
 
 interface Match {
@@ -47,15 +58,17 @@ interface Match {
 const Challenges: React.FC = () => {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { suspension } = useSuspension();
   const [allMatches, setAllMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
   const [players, setPlayers] = useState<Player[]>([]);
   const [championshipId, setChampionshipId] = useState<string>('');
   const [currentUserCategory, setCurrentUserCategory] = useState<string>('');
-  
+
   // Dialog states
   const [newChallengeOpen, setNewChallengeOpen] = useState(false);
   const [launchChallengeOpen, setLaunchChallengeOpen] = useState(false);
+  const [suspendedDialogOpen, setSuspendedDialogOpen] = useState(false);
   const [setDateTimeOpen, setSetDateTimeOpen] = useState(false);
   const [selectedChallengeForDateTime, setSelectedChallengeForDateTime] = useState<Match | null>(null);
   const [registerResultOpen, setRegisterResultOpen] = useState(false);
@@ -67,8 +80,21 @@ const Challenges: React.FC = () => {
   const [blockReason, setBlockReason] = useState<'scheduled' | 'toRegister' | 'launchedChallenge' | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [challengeToDelete, setChallengeToDelete] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [rejectConfirmOpen, setRejectConfirmOpen] = useState(false);
   const [challengeToReject, setChallengeToReject] = useState<string | null>(null);
+
+  // Suspension dialog states
+  const [showSuspensionReasonDialog, setShowSuspensionReasonDialog] = useState(false);
+  const [showUnavailableDialog, setShowUnavailableDialog] = useState(false);
+  const [selectedUnavailablePlayer, setSelectedUnavailablePlayer] = useState<Player | null>(null);
+
+  // Loading states to prevent double submissions
+  const [creatingChallenge, setCreatingChallenge] = useState(false);
+  const [launchingChallenge, setLaunchingChallenge] = useState(false);
+  const [acceptingChallenge, setAcceptingChallenge] = useState(false);
+  const [rejectingChallenge, setRejectingChallenge] = useState(false);
+  const [settingDateTime, setSettingDateTime] = useState(false);
 
   // New filter states for full history
   const [historyFilterType, setHistoryFilterType] = useState<'month' | 'year' | 'all'>('all');
@@ -294,12 +320,33 @@ const Challenges: React.FC = () => {
         .select('*')
         .eq('championship_id', champData.id);
 
-      setPlayers(playersData || []);
+      // Load active suspensions
+      const { data: suspensionsData } = await supabase
+        .from('player_suspensions')
+        .select('user_id, start_date, end_date, reason')
+        .eq('is_active', true);
+
+      // Create suspensions map
+      const suspensionsMap = new Map(
+        (suspensionsData || []).map(s => [s.user_id, {
+          start_date: s.start_date,
+          end_date: s.end_date,
+          reason: s.reason
+        }])
+      );
+
+      // Add suspension data to players
+      const playersWithSuspensions = (playersData || []).map(player => ({
+        ...player,
+        suspension: suspensionsMap.get(player.user_id) || null
+      }));
+
+      setPlayers(playersWithSuspensions);
 
       if (!user?.id) return;
 
       // Get current user's category
-      const currentPlayer = playersData?.find(p => p.user_id === user.id);
+      const currentPlayer = playersWithSuspensions?.find(p => p.user_id === user.id);
       if (currentPlayer) {
         setCurrentUserCategory(currentPlayer.live_rank_category);
       }
@@ -355,6 +402,12 @@ const Challenges: React.FC = () => {
   };
 
   const handleOpenNewChallenge = () => {
+    // Check if user is suspended
+    if (suspension) {
+      setSuspendedDialogOpen(true);
+      return;
+    }
+
     // Check if user has pending challenges or matches to register
     if (launchedChallenges.length > 0) {
       setBlockReason('launchedChallenge');
@@ -468,10 +521,11 @@ const Challenges: React.FC = () => {
   };
 
   const handleCreateChallenge = async () => {
-    if (!selectedOpponent || !selectedDate || !selectedTime || !user?.id) {
+    if (!selectedOpponent || !selectedDate || !selectedTime || !user?.id || creatingChallenge) {
       return;
     }
 
+    setCreatingChallenge(true);
     try {
       const [hours, minutes] = selectedTime.split(':');
       const matchDateTime = new Date(selectedDate);
@@ -505,6 +559,8 @@ const Challenges: React.FC = () => {
         description: error.message || 'Impossibile creare la sfida',
         variant: 'destructive',
       });
+    } finally {
+      setCreatingChallenge(false);
     }
   };
 
@@ -737,11 +793,10 @@ const Challenges: React.FC = () => {
   };
 
   const handleDeleteChallenge = async () => {
-    if (!user?.id || !challengeToDelete) return;
+    if (!user?.id || !challengeToDelete || deleting) return;
 
     const matchId = challengeToDelete;
-    setDeleteConfirmOpen(false);
-    setChallengeToDelete(null);
+    setDeleting(true);
 
     try {
       // Prima ottieni i dati della sfida per inviare email
@@ -830,11 +885,21 @@ const Challenges: React.FC = () => {
         description: error.message || 'Impossibile eliminare la sfida',
         variant: 'destructive',
       });
+    } finally {
+      setDeleting(false);
+      setDeleteConfirmOpen(false);
+      setChallengeToDelete(null);
     }
   };
 
   // Launch Challenge Functions
   const handleOpenLaunchChallenge = () => {
+    // Check if user is suspended
+    if (suspension) {
+      setSuspendedDialogOpen(true);
+      return;
+    }
+
     // Check constraints
     if (launchedChallenges.length > 0) {
       setBlockReason('launchedChallenge');
@@ -860,8 +925,9 @@ const Challenges: React.FC = () => {
   };
 
   const handleLaunchChallenge = async () => {
-    if (!selectedOpponent || !user?.id) return;
+    if (!selectedOpponent || !user?.id || launchingChallenge) return;
 
+    setLaunchingChallenge(true);
     try {
       const { data: newMatch, error } = await supabase.from('matches')
         .insert({
@@ -917,12 +983,15 @@ const Challenges: React.FC = () => {
         description: error.message || 'Impossibile lanciare la sfida',
         variant: 'destructive',
       });
+    } finally {
+      setLaunchingChallenge(false);
     }
   };
 
   const handleAcceptChallenge = async (challengeId: string) => {
-    if (!user?.id) return;
+    if (!user?.id || acceptingChallenge) return;
 
+    setAcceptingChallenge(true);
     try {
       // Prima ottieni i dati della sfida
       const { data: challengeData } = await supabase
@@ -985,6 +1054,8 @@ const Challenges: React.FC = () => {
         description: error.message || 'Impossibile accettare la sfida',
         variant: 'destructive',
       });
+    } finally {
+      setAcceptingChallenge(false);
     }
   };
 
@@ -1040,8 +1111,9 @@ const Challenges: React.FC = () => {
   };
 
   const handleSetDateTime = async () => {
-    if (!selectedChallengeForDateTime || !selectedDate || !selectedTime || !user?.id) return;
+    if (!selectedChallengeForDateTime || !selectedDate || !selectedTime || !user?.id || settingDateTime) return;
 
+    setSettingDateTime(true);
     try {
       const [hours, minutes] = selectedTime.split(':');
       const matchDateTime = new Date(selectedDate);
@@ -1129,6 +1201,8 @@ const Challenges: React.FC = () => {
         description: error.message || 'Impossibile impostare data e ora',
         variant: 'destructive',
       });
+    } finally {
+      setSettingDateTime(false);
     }
   };
 
@@ -1277,10 +1351,11 @@ const Challenges: React.FC = () => {
                             variant="default"
                             size="sm"
                             onClick={() => handleAcceptChallenge(challenge.id)}
+                            disabled={acceptingChallenge}
                             className="w-full bg-green-500 hover:bg-green-600"
                           >
                             <Check className="h-4 w-4 mr-1" />
-                            Accetta
+                            {acceptingChallenge ? 'Accettazione...' : 'Accetta'}
                           </Button>
                           <Button
                             variant="destructive"
@@ -1886,25 +1961,29 @@ const Challenges: React.FC = () => {
                 <div className="space-y-2 max-h-[50vh] overflow-y-auto">
                   {filteredPlayers.map((player) => {
                     const hasPendingMatches = playerHasPendingMatches(player.user_id);
-                    const isDisabled = hasPendingMatches;
+                    const isSuspended = player.availability_status === 'suspended';
+                    const isUnavailable = player.availability_status === 'unavailable' || hasPendingMatches;
+                    const isDisabled = isSuspended || isUnavailable;
 
                     return (
                       <div
                         key={player.id}
                         onClick={() => {
-                          if (isDisabled) {
-                            toast({
-                              title: 'Avversario non disponibile',
-                              description: `${player.display_name} ha già una sfida programmata o un match da registrare`,
-                              variant: 'destructive',
-                            });
+                          if (isSuspended) {
+                            setSelectedUnavailablePlayer(player);
+                            setShowSuspensionReasonDialog(true);
+                            return;
+                          }
+                          if (isUnavailable) {
+                            setSelectedUnavailablePlayer(player);
+                            setShowUnavailableDialog(true);
                             return;
                           }
                           setSelectedOpponent(player);
                         }}
                         className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
                           isDisabled
-                            ? 'opacity-50 cursor-not-allowed bg-gray-100'
+                            ? 'opacity-60 cursor-pointer bg-gray-100 dark:bg-gray-800/50'
                             : selectedOpponent?.id === player.id
                               ? 'bg-tennis-court/20 border-2 border-tennis-court cursor-pointer'
                               : 'bg-muted/50 hover:bg-muted cursor-pointer'
@@ -1918,17 +1997,45 @@ const Challenges: React.FC = () => {
                           )}
                         </Avatar>
                         <div className="flex-1">
-                          <p className="font-medium">{player.display_name}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium">{player.display_name}</p>
+                            {/* Status dot: orange for suspended, red for unavailable, green for available */}
+                            {isSuspended ? (
+                              <div
+                                className="h-3 w-3 rounded-full bg-gradient-to-br from-orange-500 to-orange-700 shadow-sm"
+                                title="Sospeso"
+                              />
+                            ) : isUnavailable ? (
+                              <div
+                                className="h-3 w-3 rounded-full bg-gradient-to-br from-red-500 to-red-700 shadow-sm"
+                                title="Non disponibile"
+                              />
+                            ) : (
+                              <div
+                                className="h-3 w-3 rounded-full bg-gradient-to-br from-green-500 to-green-700 shadow-sm"
+                                title="Disponibile"
+                              />
+                            )}
+                          </div>
                           {isDisabled && (
-                            <Badge variant="outline" className="mt-1 text-xs border-red-300 text-red-600">
-                              Non disponibile
+                            <Badge variant="outline" className={`mt-1 text-xs ${
+                              isSuspended
+                                ? 'border-orange-300 text-orange-600 dark:border-orange-500 dark:text-orange-400'
+                                : 'border-red-300 text-red-600 dark:border-red-500 dark:text-red-400'
+                            }`}>
+                              {isSuspended ? 'Sospeso' : 'Non disponibile'}
                             </Badge>
                           )}
                         </div>
                         {selectedOpponent?.id === player.id && !isDisabled && (
                           <CheckCircle className="h-5 w-5 text-tennis-court ml-auto" />
                         )}
-                        {isDisabled && (
+                        {isSuspended && (
+                          <div className="h-5 w-5 rounded-full bg-gradient-to-br from-orange-500 to-orange-700 shadow-sm ml-auto flex items-center justify-center">
+                            <div className="h-2 w-0.5 bg-white rounded-full" />
+                          </div>
+                        )}
+                        {isUnavailable && !isSuspended && (
                           <XCircle className="h-5 w-5 text-red-500 ml-auto" />
                         )}
                       </div>
@@ -1994,12 +2101,13 @@ const Challenges: React.FC = () => {
             )}
             <Button
               onClick={handleNextStep}
+              disabled={creatingChallenge}
               className="ml-auto bg-tennis-court hover:bg-tennis-court/90"
             >
               {currentStep === 3 ? (
                 <>
                   <Check className="h-4 w-4 mr-2" />
-                  Conferma Sfida
+                  {creatingChallenge ? 'Creazione in corso...' : 'Conferma Sfida'}
                 </>
               ) : (
                 <>
@@ -2629,25 +2737,29 @@ const Challenges: React.FC = () => {
               <div className="space-y-2 max-h-[50vh] overflow-y-auto">
                 {filteredPlayers.map((player) => {
                   const hasPendingMatches = playerHasPendingMatches(player.user_id);
-                  const isDisabled = hasPendingMatches;
+                  const isSuspended = player.availability_status === 'suspended';
+                  const isUnavailable = player.availability_status === 'unavailable' || hasPendingMatches;
+                  const isDisabled = isSuspended || isUnavailable;
 
                   return (
                     <div
                       key={player.id}
                       onClick={() => {
-                        if (isDisabled) {
-                          toast({
-                            title: 'Avversario non disponibile',
-                            description: `${player.display_name} ha già una sfida programmata o un match da registrare`,
-                            variant: 'destructive',
-                          });
+                        if (isSuspended) {
+                          setSelectedUnavailablePlayer(player);
+                          setShowSuspensionReasonDialog(true);
+                          return;
+                        }
+                        if (isUnavailable) {
+                          setSelectedUnavailablePlayer(player);
+                          setShowUnavailableDialog(true);
                           return;
                         }
                         setSelectedOpponent(player);
                       }}
                       className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
                         isDisabled
-                          ? 'opacity-50 cursor-not-allowed bg-gray-100'
+                          ? 'opacity-60 cursor-pointer bg-gray-100 dark:bg-gray-800/50'
                           : selectedOpponent?.id === player.id
                             ? 'bg-blue-600/20 border-2 border-blue-600 cursor-pointer'
                             : 'bg-muted/50 hover:bg-muted cursor-pointer'
@@ -2661,17 +2773,45 @@ const Challenges: React.FC = () => {
                         )}
                       </Avatar>
                       <div className="flex-1">
-                        <p className="font-medium">{player.display_name}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium">{player.display_name}</p>
+                          {/* Status dot: orange for suspended, red for unavailable, green for available */}
+                          {isSuspended ? (
+                            <div
+                              className="h-3 w-3 rounded-full bg-gradient-to-br from-orange-500 to-orange-700 shadow-sm"
+                              title="Sospeso"
+                            />
+                          ) : isUnavailable ? (
+                            <div
+                              className="h-3 w-3 rounded-full bg-gradient-to-br from-red-500 to-red-700 shadow-sm"
+                              title="Non disponibile"
+                            />
+                          ) : (
+                            <div
+                              className="h-3 w-3 rounded-full bg-gradient-to-br from-green-500 to-green-700 shadow-sm"
+                              title="Disponibile"
+                            />
+                          )}
+                        </div>
                         {isDisabled && (
-                          <Badge variant="outline" className="mt-1 text-xs border-red-300 text-red-600">
-                            Non disponibile
+                          <Badge variant="outline" className={`mt-1 text-xs ${
+                            isSuspended
+                              ? 'border-orange-300 text-orange-600 dark:border-orange-500 dark:text-orange-400'
+                              : 'border-red-300 text-red-600 dark:border-red-500 dark:text-red-400'
+                          }`}>
+                            {isSuspended ? 'Sospeso' : 'Non disponibile'}
                           </Badge>
                         )}
                       </div>
                       {selectedOpponent?.id === player.id && !isDisabled && (
                         <CheckCircle className="h-5 w-5 text-blue-600 ml-auto" />
                       )}
-                      {isDisabled && (
+                      {isSuspended && (
+                        <div className="h-5 w-5 rounded-full bg-gradient-to-br from-orange-500 to-orange-700 shadow-sm ml-auto flex items-center justify-center">
+                          <div className="h-2 w-0.5 bg-white rounded-full" />
+                        </div>
+                      )}
+                      {isUnavailable && !isSuspended && (
                         <XCircle className="h-5 w-5 text-red-500 ml-auto" />
                       )}
                     </div>
@@ -2684,11 +2824,11 @@ const Challenges: React.FC = () => {
           <div className="px-6 py-4 border-t bg-background">
             <Button
               onClick={handleLaunchChallenge}
-              disabled={!selectedOpponent}
+              disabled={!selectedOpponent || launchingChallenge}
               className="w-full bg-blue-600 hover:bg-blue-700 h-12"
             >
               <Send className="h-5 w-5 mr-2" />
-              Lancia Sfida
+              {launchingChallenge ? 'Invio in corso...' : 'Lancia Sfida'}
             </Button>
           </div>
         </DialogContent>
@@ -2820,12 +2960,17 @@ const Challenges: React.FC = () => {
             )}
             <Button
               onClick={handleDateTimeNextStep}
+              disabled={settingDateTime}
               className="ml-auto bg-tennis-court hover:bg-tennis-court/90"
             >
               {dateTimeStep === 2 ? (
                 <>
                   <Check className="h-4 w-4 mr-2" />
-                  {selectedChallengeForDateTime?.is_scheduled ? 'Conferma Modifica' : 'Conferma Data e Ora'}
+                  {settingDateTime
+                    ? 'Salvataggio in corso...'
+                    : selectedChallengeForDateTime?.is_scheduled
+                      ? 'Conferma Modifica'
+                      : 'Conferma Data e Ora'}
                 </>
               ) : (
                 <>
@@ -2863,9 +3008,10 @@ const Challenges: React.FC = () => {
             <Button
               variant="destructive"
               onClick={handleDeleteChallenge}
+              disabled={deleting}
               className="bg-red-600 hover:bg-red-700"
             >
-              Elimina
+              {deleting ? 'Eliminazione...' : 'Elimina'}
             </Button>
           </div>
         </DialogContent>
@@ -2896,13 +3042,37 @@ const Challenges: React.FC = () => {
             <Button
               variant="destructive"
               onClick={handleRejectChallenge}
+              disabled={rejectingChallenge}
               className="bg-red-600 hover:bg-red-700"
             >
-              Rifiuta
+              {rejectingChallenge ? 'Rifiuto in corso...' : 'Rifiuta'}
             </Button>
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Suspended Player Dialog */}
+      <SuspendedPlayerDialog
+        open={suspendedDialogOpen}
+        onOpenChange={setSuspendedDialogOpen}
+      />
+
+      {/* Dialog for suspended opponent */}
+      <SuspensionReasonDialog
+        open={showSuspensionReasonDialog && !!selectedUnavailablePlayer?.suspension}
+        onOpenChange={setShowSuspensionReasonDialog}
+        playerName={selectedUnavailablePlayer?.display_name || ''}
+        startDate={selectedUnavailablePlayer?.suspension?.start_date || ''}
+        endDate={selectedUnavailablePlayer?.suspension?.end_date || ''}
+        reason={selectedUnavailablePlayer?.suspension?.reason || ''}
+      />
+
+      {/* Dialog for unavailable opponent (red dot) */}
+      <UnavailablePlayerDialog
+        open={showUnavailableDialog}
+        onOpenChange={setShowUnavailableDialog}
+        playerName={selectedUnavailablePlayer?.display_name || ''}
+      />
     </div>
   );
 };

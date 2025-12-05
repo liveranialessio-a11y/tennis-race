@@ -44,7 +44,7 @@ interface FilteredStats {
 }
 
 const ProfileNew = () => {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -305,23 +305,7 @@ const ProfileNew = () => {
   };
 
   const handleLogout = async () => {
-    try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-
-      toast({
-        title: "Logout effettuato",
-        description: "A presto!",
-      });
-
-      navigate('/');
-    } catch (error: any) {
-      toast({
-        title: "Errore",
-        description: error.message,
-        variant: "destructive",
-      });
-    }
+    await signOut();
   };
 
   // Data for charts

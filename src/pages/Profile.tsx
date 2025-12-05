@@ -7,15 +7,20 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
-import { LogOut, Trophy, Target, Camera, Edit, Eye, EyeOff, Award, Moon, Sun } from 'lucide-react';
+import { LogOut, Trophy, Target, Camera, Edit, Eye, EyeOff, Award, Moon, Sun, Settings as SettingsIcon } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { PieChart, Pie, ResponsiveContainer, Cell } from 'recharts';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import TrophyCard from '@/components/TrophyCard';
 import { useTheme } from '@/components/theme-provider';
 import { ImageCropper } from '@/components/ImageCropper';
+import NotificationSettings from '@/components/NotificationSettings';
+import { SuspensionDialog } from '@/components/suspension/SuspensionDialog';
+import { useSuspension } from '@/hooks/useSuspension';
+import { AvailabilityStatusBadge } from '@/components/suspension/AvailabilityStatusBadge';
+import { useAvailabilityStatus } from '@/hooks/useAvailabilityStatus';
 
 interface PlayerStats {
   id: string;
@@ -62,7 +67,7 @@ interface PlayerTrophy {
 }
 
 const ProfileNew = () => {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
@@ -82,6 +87,8 @@ const ProfileNew = () => {
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1);
 
   // Edit dialog states
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<'account' | 'notifications'>('account');
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [newFirstName, setNewFirstName] = useState('');
   const [newLastName, setNewLastName] = useState('');
@@ -94,6 +101,10 @@ const ProfileNew = () => {
   const [allTrophiesDialogOpen, setAllTrophiesDialogOpen] = useState(false);
   const [imageToCrop, setImageToCrop] = useState<string | null>(null);
   const [cropperOpen, setCropperOpen] = useState(false);
+  const [suspensionDialogOpen, setSuspensionDialogOpen] = useState(false);
+
+  const { suspension } = useSuspension();
+  const { status: availabilityStatus } = useAvailabilityStatus(user?.id);
 
   // Available years for filter (from 2020 to current year + 1)
   const availableYears = Array.from(
@@ -280,6 +291,18 @@ const ProfileNew = () => {
     };
   };
 
+  const openSettingsDialog = () => {
+    if (!playerStats) return;
+
+    const nameParts = playerStats.display_name.split(' ');
+    setNewFirstName(nameParts[0] || '');
+    setNewLastName(nameParts.slice(1).join(' ') || '');
+    setNewPhone(playerStats.phone || '');
+    setNewPassword('');
+    setConfirmPassword('');
+    setSettingsDialogOpen(true);
+  };
+
   const handleUpdateProfile = async () => {
     if (!playerStats) return;
 
@@ -332,6 +355,7 @@ const ProfileNew = () => {
       }
 
       setPlayerStats({ ...playerStats, display_name: fullName, phone: newPhone.trim() || null });
+      setSettingsDialogOpen(false);
       setEditDialogOpen(false);
 
       toast({
@@ -438,23 +462,7 @@ const ProfileNew = () => {
   };
 
   const handleLogout = async () => {
-    try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-
-      toast({
-        title: "Logout effettuato",
-        description: "A presto!",
-      });
-
-      navigate('/');
-    } catch (error: any) {
-      toast({
-        title: "Errore",
-        description: error.message,
-        variant: "destructive",
-      });
-    }
+    await signOut();
   };
 
   if (loading) {
@@ -537,14 +545,38 @@ const ProfileNew = () => {
               <h2 className="text-3xl font-bold text-foreground">{playerStats.display_name}</h2>
             </div>
 
-            <div className="flex gap-2 w-full max-w-md">
+            {/* Stato di disponibilità */}
+            {playerStats && (
+              <div className="w-full max-w-md border-t pt-4">
+                <div className="flex items-center justify-between bg-muted/30 rounded-lg p-4">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground mb-1">Stato</p>
+                    <div className="flex items-center gap-2">
+                      <AvailabilityStatusBadge
+                        status={availabilityStatus}
+                        showLabel={true}
+                      />
+                    </div>
+                  </div>
+                  <Button
+                    onClick={() => setSuspensionDialogOpen(true)}
+                    variant="outline"
+                    size="sm"
+                  >
+                    {suspension ? 'Gestisci' : 'Modifica Stato'}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-2 w-full max-w-md border-t pt-4">
               <Button
-                onClick={() => setEditDialogOpen(true)}
+                onClick={openSettingsDialog}
                 variant="outline"
                 className="flex-1 h-12"
               >
-                <Edit className="h-4 w-4 mr-2" />
-                Modifica profilo
+                <SettingsIcon className="h-4 w-4 mr-2" />
+                Impostazioni
               </Button>
 
               <Button
@@ -1197,6 +1229,122 @@ const ProfileNew = () => {
         </DialogContent>
       </Dialog>
 
+      {/* Settings Dialog with Tabs */}
+      <Dialog open={settingsDialogOpen} onOpenChange={setSettingsDialogOpen}>
+        <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Impostazioni</DialogTitle>
+            <DialogDescription>
+              Gestisci il tuo account e le preferenze
+            </DialogDescription>
+          </DialogHeader>
+
+          <Tabs value={settingsTab} onValueChange={(value) => setSettingsTab(value as 'account' | 'notifications')} className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="account">Account</TabsTrigger>
+              <TabsTrigger value="notifications">Notifiche</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="account" className="space-y-4 mt-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="settings-first-name">Nome *</Label>
+                  <Input
+                    id="settings-first-name"
+                    value={newFirstName}
+                    onChange={(e) => setNewFirstName(e.target.value)}
+                    placeholder="Mario"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="settings-last-name">Cognome *</Label>
+                  <Input
+                    id="settings-last-name"
+                    value={newLastName}
+                    onChange={(e) => setNewLastName(e.target.value)}
+                    placeholder="Rossi"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="settings-phone">Telefono</Label>
+                <Input
+                  id="settings-phone"
+                  type="tel"
+                  value={newPhone}
+                  onChange={(e) => setNewPhone(e.target.value)}
+                  placeholder="+39 123 456 7890"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Email</Label>
+                <div className="p-3 bg-muted/50 rounded-lg">
+                  <p className="text-sm">{user?.email}</p>
+                </div>
+                <p className="text-xs text-muted-foreground">L'email non può essere modificata</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="settings-new-password">Nuova Password</Label>
+                <div className="relative">
+                  <Input
+                    id="settings-new-password"
+                    type={showPassword ? "text" : "password"}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Lascia vuoto per non modificare"
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {newPassword && (
+                <div className="space-y-2">
+                  <Label htmlFor="settings-confirm-password">Conferma Password</Label>
+                  <Input
+                    id="settings-confirm-password"
+                    type={showPassword ? "text" : "password"}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Conferma la nuova password"
+                  />
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-4">
+                <Button
+                  onClick={() => setSettingsDialogOpen(false)}
+                  variant="outline"
+                  className="flex-1"
+                >
+                  Annulla
+                </Button>
+                <Button
+                  onClick={handleUpdateProfile}
+                  disabled={saving || !newFirstName.trim() || !newLastName.trim()}
+                  className="flex-1 bg-tennis-court hover:bg-tennis-court/90"
+                >
+                  {saving ? 'Salvataggio...' : 'Salva Modifiche'}
+                </Button>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="notifications" className="mt-4">
+              <NotificationSettings />
+            </TabsContent>
+          </Tabs>
+        </DialogContent>
+      </Dialog>
+
       {/* Image Cropper Dialog */}
       {imageToCrop && (
         <ImageCropper
@@ -1206,8 +1354,16 @@ const ProfileNew = () => {
           open={cropperOpen}
         />
       )}
+
+      {/* Suspension Dialog */}
+      <SuspensionDialog
+        open={suspensionDialogOpen}
+        onOpenChange={setSuspensionDialogOpen}
+      />
     </div>
   );
 };
+
+
 
 export default ProfileNew;

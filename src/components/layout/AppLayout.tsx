@@ -5,6 +5,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useNavigate } from 'react-router-dom';
+import NotificationBell from '@/components/notifications/NotificationBell';
+import { SuspensionChecker } from '@/components/suspension/SuspensionChecker';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -122,6 +124,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
 
   return (
     <div className="min-h-screen flex flex-col w-full bg-background">
+      <SuspensionChecker />
+
       <header className="h-16 border-b border-tennis-court/20 bg-card/50 backdrop-blur-sm sticky top-0 z-50">
         <div className="flex items-center justify-between h-full px-6">
           {/* Avatar e nome a sinistra - cliccabile per andare al profilo */}
@@ -157,8 +161,11 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
             <h1 className="text-2xl font-bold text-tennis-court">TENNIS RACE</h1>
           </div>
 
-          {/* Coccarda a destra */}
-          <RankBadge position={playerData.position} category={playerData.category} />
+          {/* Notifiche e Coccarda a destra */}
+          <div className="flex items-center gap-3">
+            <NotificationBell />
+            <RankBadge position={playerData.position} category={playerData.category} />
+          </div>
         </div>
       </header>
 

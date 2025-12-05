@@ -11,6 +11,8 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import PlayerStatsDialog from '@/components/PlayerStatsDialog';
+import { SuspensionReasonDialog } from '@/components/suspension/SuspensionReasonDialog';
+import type { Database } from '@/integrations/supabase/types';
 import {
   Dialog,
   DialogContent,
@@ -41,6 +43,12 @@ interface Player {
   best_position_in_gold: number | null;
   best_position_in_silver: number | null;
   best_position_in_bronze: number | null;
+  availability_status?: Database['public']['Enums']['availability_status_enum'];
+  suspension?: {
+    start_date: string;
+    end_date: string;
+    reason: string;
+  } | null;
 }
 
 interface PlayerWithStats extends Player {
@@ -99,6 +107,18 @@ const Championships: React.FC = () => {
   const [challengedPlayer, setChallengedPlayer] = useState<PlayerWithStats | null>(null);
   const [isLaunchingChallenge, setIsLaunchingChallenge] = useState(false);
 
+  // Suspension Dialog
+  const [showSuspensionDialog, setShowSuspensionDialog] = useState(false);
+  const [selectedSuspendedPlayer, setSelectedSuspendedPlayer] = useState<Player | null>(null);
+
+  useEffect(() => {
+    console.log('🔄 Suspension dialog state changed:', {
+      showSuspensionDialog,
+      selectedSuspendedPlayer: selectedSuspendedPlayer?.display_name,
+      hasSuspension: !!selectedSuspendedPlayer?.suspension
+    });
+  }, [showSuspensionDialog, selectedSuspendedPlayer]);
+
   const handlePlayerClick = (userId: string) => {
     setSelectedPlayerId(userId);
     setShowPlayerDialog(true);
@@ -107,6 +127,14 @@ const Championships: React.FC = () => {
   const handleChallengeClick = (player: PlayerWithStats) => {
     setChallengedPlayer(player);
     setShowChallengeModal(true);
+  };
+
+  const handleSuspensionClick = (player: Player) => {
+    console.log('🔍 Clicked suspended player:', player);
+    console.log('🔍 Suspension data:', player.suspension);
+    setSelectedSuspendedPlayer(player);
+    setShowSuspensionDialog(true);
+    console.log('✅ Dialog state set to true');
   };
 
   const handleLaunchChallenge = async () => {
@@ -203,7 +231,28 @@ const Championships: React.FC = () => {
 
         if (playersError) console.error('❌ Error loading players:', playersError);
 
-        setAllPlayers(allPlayersData || []);
+        // Fetch active suspensions
+        const { data: suspensionsData } = await supabase
+          .from('player_suspensions')
+          .select('user_id, start_date, end_date, reason')
+          .eq('is_active', true);
+
+        // Map suspensions by user_id
+        const suspensionsMap = new Map(
+          (suspensionsData || []).map(s => [s.user_id, {
+            start_date: s.start_date,
+            end_date: s.end_date,
+            reason: s.reason
+          }])
+        );
+
+        // Add suspension data to players
+        const playersWithSuspensions = (allPlayersData || []).map(player => ({
+          ...player,
+          suspension: suspensionsMap.get(player.user_id) || null
+        }));
+
+        setAllPlayers(playersWithSuspensions);
 
         // Fetch top 3 players from each category for Live Ranking
         const { data: allLivePlayersData } = await supabase
@@ -213,14 +262,20 @@ const Championships: React.FC = () => {
           .not('live_rank_position', 'is', null)
           .order('live_rank_position', { ascending: true });
 
+        // Add suspension data to live players
+        const livePlayersWithSuspensions = (allLivePlayersData || []).map(player => ({
+          ...player,
+          suspension: suspensionsMap.get(player.user_id) || null
+        }));
+
         // Filter top 3 from each category
-        const goldTop3 = (allLivePlayersData || [])
+        const goldTop3 = livePlayersWithSuspensions
           .filter(p => p.live_rank_category === 'gold')
           .slice(0, 3);
-        const silverTop3 = (allLivePlayersData || [])
+        const silverTop3 = livePlayersWithSuspensions
           .filter(p => p.live_rank_category === 'silver')
           .slice(0, 3);
-        const bronzeTop3 = (allLivePlayersData || [])
+        const bronzeTop3 = livePlayersWithSuspensions
           .filter(p => p.live_rank_category === 'bronze')
           .slice(0, 3);
 
@@ -240,7 +295,13 @@ const Championships: React.FC = () => {
           .order('display_name', { ascending: true })
           .limit(3);
 
-        setTopProMasterPlayers(proMasterData || []);
+        // Add suspension data to pro master players
+        const proMasterWithSuspensions = (proMasterData || []).map(player => ({
+          ...player,
+          suspension: suspensionsMap.get(player.user_id) || null
+        }));
+
+        setTopProMasterPlayers(proMasterWithSuspensions);
 
         // Fetch next 3 upcoming scheduled matches
         const now = new Date().toISOString();
@@ -443,7 +504,38 @@ const Championships: React.FC = () => {
         .not('live_rank_position', 'is', null)
         .order('live_rank_position', { ascending: true });
 
-      setAllPlayers(playersData || []);
+      // Fetch active suspensions
+      const { data: suspensionsData, error: suspensionsError } = await supabase
+        .from('player_suspensions')
+        .select('user_id, start_date, end_date, reason')
+        .eq('is_active', true);
+
+      if (suspensionsError) {
+        console.error('❌ Error loading suspensions:', suspensionsError);
+      }
+
+      console.log('📋 Loaded suspensions in loadFullLiveRanking:', suspensionsData);
+
+      // Map suspensions by user_id
+      const suspensionsMap = new Map(
+        (suspensionsData || []).map(s => [s.user_id, {
+          start_date: s.start_date,
+          end_date: s.end_date,
+          reason: s.reason
+        }])
+      );
+
+      console.log('🗺️ Suspensions map:', suspensionsMap);
+
+      // Add suspension data to players
+      const playersWithSuspensions = (playersData || []).map(player => ({
+        ...player,
+        suspension: suspensionsMap.get(player.user_id) || null
+      }));
+
+      console.log('👥 Players with suspensions:', playersWithSuspensions.filter(p => p.suspension));
+
+      setAllPlayers(playersWithSuspensions);
 
       // Calcola statistiche mensili e annuali per ogni giocatore
       const now = new Date();
@@ -507,7 +599,7 @@ const Championships: React.FC = () => {
         })
       );
 
-      // Combina players con stats e challengeable status
+      // Combina players con stats, challengeable status e suspension data
       const playersWithStatsData: PlayerWithStats[] = (playersData || []).map((player, index) => ({
         ...player,
         yearlyMatches: statsMap.get(player.user_id)?.yearlyMatches || 0,
@@ -515,6 +607,7 @@ const Championships: React.FC = () => {
         yearlyLosses: statsMap.get(player.user_id)?.yearlyLosses || 0,
         yearlyDraws: statsMap.get(player.user_id)?.yearlyDraws || 0,
         isChallengeable: challengeableChecks[index],
+        suspension: suspensionsMap.get(player.user_id) || null,
       }));
 
       setPlayersWithStats(playersWithStatsData);
@@ -1563,11 +1656,13 @@ const Championships: React.FC = () => {
                               </AvatarFallback>
                             )}
                           </Avatar>
-                          <div
-                            className="font-medium cursor-pointer hover:text-tennis-court transition-colors"
-                            onClick={() => handlePlayerClick(player.user_id)}
-                          >
-                            {player.display_name}
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="font-medium cursor-pointer hover:text-tennis-court transition-colors"
+                              onClick={() => handlePlayerClick(player.user_id)}
+                            >
+                              {player.display_name}
+                            </div>
                           </div>
                         </div>
                       </TableCell>
@@ -1577,6 +1672,14 @@ const Championships: React.FC = () => {
                             <div className="h-8 w-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
                               <span className="text-xs text-muted-foreground font-medium">Tu</span>
                             </div>
+                          ) : player.availability_status === 'suspended' ? (
+                            <button
+                              onClick={() => handleSuspensionClick(player)}
+                              className="group h-6 w-6 rounded-full bg-gradient-to-br from-orange-500 to-orange-700 hover:from-orange-600 hover:to-orange-800 shadow-lg hover:shadow-xl hover:shadow-orange-500/50 transition-all duration-300 hover:scale-110 flex items-center justify-center cursor-pointer"
+                              title="Sospeso - Clicca per dettagli"
+                            >
+                              <div className="h-2.5 w-0.5 bg-white rounded-full" />
+                            </button>
                           ) : player.isChallengeable ? (
                             <button
                               onClick={() => handleChallengeClick(player)}
@@ -1817,6 +1920,16 @@ const Championships: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Suspension Reason Dialog */}
+      <SuspensionReasonDialog
+        open={showSuspensionDialog && !!selectedSuspendedPlayer?.suspension}
+        onOpenChange={setShowSuspensionDialog}
+        playerName={selectedSuspendedPlayer?.display_name || ''}
+        startDate={selectedSuspendedPlayer?.suspension?.start_date || ''}
+        endDate={selectedSuspendedPlayer?.suspension?.end_date || ''}
+        reason={selectedSuspendedPlayer?.suspension?.reason || ''}
+      />
       </>
     );
   }
@@ -1879,7 +1992,7 @@ const Championships: React.FC = () => {
                               </AvatarFallback>
                             )}
                           </Avatar>
-                          <div 
+                          <div
                             className="font-medium cursor-pointer hover:text-tennis-court transition-colors"
                             onClick={() => handlePlayerClick(player.user_id)}
                           >
@@ -2545,7 +2658,7 @@ const Championships: React.FC = () => {
     </div>
     
     {/* Player Stats Dialog */}
-    <PlayerStatsDialog 
+    <PlayerStatsDialog
       playerId={selectedPlayerId}
       open={showPlayerDialog}
       onOpenChange={setShowPlayerDialog}

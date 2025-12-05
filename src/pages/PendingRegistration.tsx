@@ -79,8 +79,15 @@ export default function PendingRegistration() {
   };
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    navigate('/login');
+    try {
+      localStorage.removeItem('supabase.auth.token');
+      sessionStorage.clear();
+      await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+    } catch (err) {
+      console.warn('Logout error (ignored):', err);
+    } finally {
+      navigate('/login');
+    }
   };
 
   if (loading) {

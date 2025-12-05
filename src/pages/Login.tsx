@@ -36,6 +36,7 @@ const Login: React.FC = () => {
 
   // Register state
   const [registerEmail, setRegisterEmail] = useState('');
+  const [confirmEmail, setConfirmEmail] = useState('');
   const [registerPassword, setRegisterPassword] = useState('');
   const [registerConfirmPassword, setRegisterConfirmPassword] = useState('');
   const [firstName, setFirstName] = useState('');
@@ -84,7 +85,11 @@ const Login: React.FC = () => {
     e.preventDefault();
 
     // Validation
-    if (!registerEmail || !registerPassword || !firstName || !lastName || !phone) {
+    if (!registerEmail || !confirmEmail || !registerPassword || !firstName || !lastName || !phone) {
+      return;
+    }
+
+    if (registerEmail !== confirmEmail) {
       return;
     }
 
@@ -111,8 +116,8 @@ const Login: React.FC = () => {
     setIsRegistering(false);
 
     if (!error) {
-      // Redirect to email confirmation page
-      navigate(`/confirm-email?email=${encodeURIComponent(registerEmail)}`);
+      // Redirect to pending registration page
+      navigate('/pending-registration');
     }
   };
 
@@ -489,6 +494,24 @@ const Login: React.FC = () => {
               </div>
 
               <div className="space-y-2">
+                <Label htmlFor="confirm-email" className="text-slate-200">Conferma Email</Label>
+                <Input
+                  id="confirm-email"
+                  type="email"
+                  placeholder="tua@email.com"
+                  value={confirmEmail}
+                  onChange={(e) => setConfirmEmail(e.target.value)}
+                  required
+                  disabled={isRegistering}
+                />
+                {registerEmail && confirmEmail && registerEmail !== confirmEmail && (
+                  <p className="text-xs text-red-600">
+                    Le email non coincidono
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
                 <Label htmlFor="phone" className="text-slate-200">Numero di Telefono</Label>
                 <div className="flex gap-2">
                   <Input
@@ -574,11 +597,13 @@ const Login: React.FC = () => {
                 disabled={
                   isRegistering ||
                   !registerEmail ||
+                  !confirmEmail ||
                   !registerPassword ||
                   !firstName ||
                   !lastName ||
                   !phone ||
                   phone.replace(/\D/g, '').length !== 10 ||
+                  registerEmail !== confirmEmail ||
                   registerPassword !== registerConfirmPassword ||
                   registerPassword.length < 6
                 }

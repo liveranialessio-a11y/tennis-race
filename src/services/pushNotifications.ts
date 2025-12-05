@@ -49,6 +49,14 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
 // Subscribe to push notifications
 export async function subscribeToPush(userId: string): Promise<boolean> {
   try {
+    // Check if VAPID key is available
+    if (!VAPID_PUBLIC_KEY) {
+      console.error('❌ VAPID public key not configured');
+      throw new Error('VAPID public key not configured');
+    }
+
+    console.log('🔑 VAPID key available:', VAPID_PUBLIC_KEY.substring(0, 20) + '...');
+
     // 1. Register service worker
     const registration = await registerServiceWorker();
     if (!registration) {
@@ -57,15 +65,17 @@ export async function subscribeToPush(userId: string): Promise<boolean> {
 
     // Wait for service worker to be ready
     await navigator.serviceWorker.ready;
+    console.log('✅ Service Worker ready');
 
     // 2. Request permission
     const permission = await requestNotificationPermission();
     if (permission !== 'granted') {
       console.warn('⚠️ Notification permission denied');
-      return false;
+      throw new Error('Notification permission denied');
     }
 
     // 3. Subscribe to push
+    console.log('📱 Attempting to subscribe to push...');
     const subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
@@ -76,19 +86,27 @@ export async function subscribeToPush(userId: string): Promise<boolean> {
     // 4. Save subscription to database
     const subscriptionData = JSON.parse(JSON.stringify(subscription));
 
-    const { error } = await supabase.from('push_subscriptions').upsert(
-      {
-        user_id: userId,
-        endpoint: subscriptionData.endpoint,
-        p256dh: subscriptionData.keys.p256dh,
-        auth: subscriptionData.keys.auth,
-        user_agent: navigator.userAgent,
-        updated_at: new Date().toISOString(),
-      },
-      {
-        onConflict: 'user_id,endpoint',
-      }
-    );
+    console.log('💾 Saving subscription to database:', {
+      user_id: userId,
+      endpoint: subscriptionData.endpoint,
+      p256dh: subscriptionData.keys.p256dh,
+      auth: subscriptionData.keys.auth,
+    });
+
+    // First, delete any existing subscription for this user
+    await supabase
+      .from('push_subscriptions')
+      .delete()
+      .eq('user_id', userId);
+
+    // Then insert the new one
+    const { error } = await supabase.from('push_subscriptions').insert({
+      user_id: userId,
+      endpoint: subscriptionData.endpoint,
+      p256dh: subscriptionData.keys.p256dh,
+      auth: subscriptionData.keys.auth,
+      user_agent: navigator.userAgent,
+    });
 
     if (error) {
       console.error('❌ Error saving subscription:', error);
